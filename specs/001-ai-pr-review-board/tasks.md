@@ -27,15 +27,15 @@
 
 **Purpose**: Initialize the three-package workspace, toolchain, and run scripts.
 
-- [ ] T001 Create the npm workspace root `package.json` with `shared`, `server`, and `web` workspaces, `engines.node >=22.13`, and package-manager metadata per plan.md
-- [ ] T002 [P] Add `tsconfig.base.json` and per-package `tsconfig.json` files for `shared/`, `server/`, and `web/` with strict mode and workspace path aliases
-- [ ] T003 [P] Configure ESLint and Prettier in `eslint.config.js` and `.prettierrc.json`, including React/TypeScript rules and no-floating-promises
-- [ ] T004 [P] Scaffold the shared package in `shared/package.json` and `shared/src/index.ts` exporting types, schemas, lane, checks, limits, and the AI denylist modules
-- [ ] T005 [P] Scaffold the server package in `server/package.json` with Fastify 5, Octokit GraphQL/REST with throttling and retry, Zod, parse-diff, and Vitest dependencies
-- [ ] T006 [P] Scaffold the web package in `web/package.json` with React 19, Vite 7, TanStack Query 5, dnd-kit, Radix UI, react-markdown, rehype-sanitize, and react-router
-- [ ] T007 [P] Configure the test harness in `vitest.config.ts`, `server/tests/setup.ts` (MSW lifecycle), and `playwright.config.ts` with a loopback-only web server
-- [ ] T008 [P] Add `.gitignore` for `node_modules`, `dist`, SQLite/cache/log paths, and `.env`, plus `.env.example` documenting `GH_TOKEN`, `GITHUB_TOKEN`, `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY`, `AI_TIMEOUT_MS`, `PORT`, and `APP_DATA_DIR`
-- [ ] T009 Wire development and production serving in `web/vite.config.ts`, `server/src/api/static.ts`, and root scripts `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:integration`, `test:e2e`, `test:perf` per quickstart §3
+- [x] T001 Create the npm workspace root `package.json` with `shared`, `server`, and `web` workspaces, `engines.node >=22.13`, and package-manager metadata per plan.md
+- [x] T002 [P] Add `tsconfig.base.json` and per-package `tsconfig.json` files for `shared/`, `server/`, and `web/` with strict mode and workspace path aliases
+- [x] T003 [P] Configure ESLint and Prettier in `eslint.config.js` and `.prettierrc.json`, including React/TypeScript rules and no-floating-promises
+- [x] T004 [P] Scaffold the shared package in `shared/package.json` and `shared/src/index.ts` exporting types, schemas, lane, checks, limits, and the AI denylist modules
+- [x] T005 [P] Scaffold the server package in `server/package.json` with Fastify 5, Octokit GraphQL/REST with throttling and retry, Zod, parse-diff, and Vitest dependencies
+- [x] T006 [P] Scaffold the web package in `web/package.json` with React 19, Vite 7, TanStack Query 5, dnd-kit, Radix UI, react-markdown, rehype-sanitize, and react-router
+- [x] T007 [P] Configure the test harness in `vitest.config.ts`, `server/tests/setup.ts` (MSW lifecycle), and `playwright.config.ts` with a loopback-only web server
+- [x] T008 [P] Add `.gitignore` for `node_modules`, `dist`, SQLite/cache/log paths, and `.env`, plus `.env.example` documenting `GH_TOKEN`, `GITHUB_TOKEN`, `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY`, `AI_TIMEOUT_MS`, `PORT`, and `APP_DATA_DIR`
+- [x] T009 Wire development and production serving in `web/vite.config.ts`, `server/src/api/static.ts`, and root scripts `dev`, `build`, `start`, `typecheck`, `lint`, `test`, `test:integration`, `test:e2e`, `test:perf` per quickstart §3
 
 **Checkpoint**: `npm install`, `npm run typecheck`, and an empty Fastify+SPA boot succeed.
 
