@@ -1,0 +1,1638 @@
+openapi: 3.1.0
+info:
+  title: PR Review Dashboard Local API
+  version: 0.1.0
+  description: >
+    Loopback-only API between the React SPA and the local Node service. All mutations
+    require the session CSRF token and a matching Origin/Host. The server never accepts
+    or returns a GitHub token, AI key, or raw secret-bearing file content for AI use.
+servers:
+  - url: http://127.0.0.1:{port}
+    variables:
+      port:
+        default: "4317"
+security: []
+tags:
+  - name: session
+  - name: repositories
+  - name: board
+  - name: pull-requests
+  - name: review-runs
+  - name: drafts
+  - name: publishing
+  - name: events
+
+paths:
+  /api/session:
+    get:
+      tags: [session]
+      operationId: getSession
+      summary: Bootstrap the SPA session
+      responses:
+        "200":
+          description: Session and capability summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/health:
+    get:
+      tags: [session]
+      operationId: getHealth
+      summary: Readiness including Git and database checks
+      responses:
+        "200":
+          description: Ready or degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/repos:
+    get:
+      tags: [repositories]
+      operationId: listRepositories
+      responses:
+        "200":
+          description: Connected repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repository"
+    post:
+      tags: [repositories]
+      operationId: connectRepository
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectRepositoryRequest"
+      responses:
+        "201":
+          description: Repository connected and initial sync queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        "401":
+          $ref: "#/components/responses/AuthProblem"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/repos/{repoId}:
+    parameters:
+      - $ref: "#/components/parameters/RepoId"
+    delete:
+      tags: [repositories]
+      operationId: disconnectRepository
+      security:
+        - CsrfToken: []
+      parameters:
+        - name: confirm
+          in: query
+          required: true
+          schema:
+            type: boolean
+            const: true
+      responses:
+        "204":
+          description: Repository data, cache, and artifacts removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/repos/{repoId}/sync:
+    parameters:
+      - $ref: "#/components/parameters/RepoId"
+    post:
+      tags: [repositories]
+      operationId: startSync
+      security:
+        - CsrfToken: []
+      responses:
+        "202":
+          description: Sync accepted (or existing sync returned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncRun"
+        "401":
+          $ref: "#/components/responses/AuthProblem"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/repos/{repoId}/ai-ack:
+    parameters:
+      - $ref: "#/components/parameters/RepoId"
+    get:
+      tags: [repositories]
+      operationId: getAiAcknowledgement
+      responses:
+        "200":
+          description: Current acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAcknowledgement"
+    put:
+      tags: [repositories]
+      operationId: acknowledgeAiProcessing
+      security:
+        - CsrfToken: []
+      responses:
+        "200":
+          description: Acknowledgement recorded for the current destination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAcknowledgement"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+    delete:
+      tags: [repositories]
+      operationId: revokeAiAcknowledgement
+      security:
+        - CsrfToken: []
+      responses:
+        "204":
+          description: Acknowledgement revoked
+
+  /api/board:
+    get:
+      tags: [board]
+      operationId: getBoard
+      parameters:
+        - name: repoId
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+        - name: needsMyReview
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Five lanes with visible counts and sorted cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Board"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/prs/{prId}:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    get:
+      tags: [pull-requests]
+      operationId: getPullRequest
+      responses:
+        "200":
+          description: Pull request detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullRequestDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/prs/{prId}/diff:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    get:
+      tags: [pull-requests]
+      operationId: getDiff
+      description: Read the current diff state; preparation is started with POST.
+      responses:
+        "200":
+          description: Prepared diff summary and file list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diff"
+        "202":
+          description: Preparation is queued or running; progress follows over SSE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiffStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      tags: [pull-requests]
+      operationId: prepareDiff
+      description: Queue or reuse the isolated local copy for the current GitHub head.
+      security:
+        - CsrfToken: []
+      responses:
+        "202":
+          description: Preparation queued or already running; progress follows over SSE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiffStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/prs/{prId}/diff/file:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    get:
+      tags: [pull-requests]
+      operationId: getDiffFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 4096
+        - name: headSha
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{40}$"
+      responses:
+        "200":
+          description: Change blocks and eligible anchors for one file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiffFileContent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/prs/{prId}/mark-ready:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    post:
+      tags: [pull-requests]
+      operationId: markReadyForReview
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkReadyRequest"
+      responses:
+        "200":
+          description: Refreshed pull request after GitHub confirms readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullRequestDetail"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/prs/{prId}/review-runs:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    post:
+      tags: [review-runs]
+      operationId: startReviewRun
+      security:
+        - CsrfToken: []
+      responses:
+        "202":
+          description: Run queued or existing active run returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRun"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/review-runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [review-runs]
+      operationId: getReviewRun
+      responses:
+        "200":
+          description: Run state and findings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/review-runs/{runId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [review-runs]
+      operationId: cancelReviewRun
+      security:
+        - CsrfToken: []
+      responses:
+        "202":
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRun"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/review-runs/{runId}/draft:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [drafts]
+      operationId: createDraft
+      security:
+        - CsrfToken: []
+      responses:
+        "201":
+          description: Draft created for a completed, non-stale run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDraft"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/drafts/{draftId}:
+    parameters:
+      - $ref: "#/components/parameters/DraftId"
+    get:
+      tags: [drafts]
+      operationId: getDraft
+      responses:
+        "200":
+          description: Draft with findings and publishability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDraft"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [drafts]
+      operationId: updateDraft
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftPatch"
+      responses:
+        "200":
+          description: Updated draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDraft"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/drafts/{draftId}/findings:
+    parameters:
+      - $ref: "#/components/parameters/DraftId"
+    post:
+      tags: [drafts]
+      operationId: addManualFinding
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FindingCreate"
+      responses:
+        "201":
+          description: Manual finding added to the draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Finding"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/drafts/{draftId}/findings/{findingId}:
+    parameters:
+      - $ref: "#/components/parameters/DraftId"
+      - $ref: "#/components/parameters/FindingId"
+    patch:
+      tags: [drafts]
+      operationId: triageFinding
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FindingPatch"
+      responses:
+        "200":
+          description: Updated draft finding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftFinding"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/drafts/{draftId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/DraftId"
+    get:
+      tags: [publishing]
+      operationId: previewDraft
+      responses:
+        "200":
+          description: Server-generated preview and short-lived confirmation token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preview"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/drafts/{draftId}/publish:
+    parameters:
+      - $ref: "#/components/parameters/DraftId"
+    post:
+      tags: [publishing]
+      operationId: publishDraft
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishRequest"
+      responses:
+        "202":
+          description: Publish accepted; progress follows over SSE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishResult"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
+  /api/prs/{prId}/activity:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    get:
+      tags: [pull-requests]
+      operationId: getActivity
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: App-recorded activity, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEvent"
+
+  /api/events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      description: >
+        Server-sent events for sync, review, and publish progress. Event names and
+        payloads are defined in contracts/events.md. A comment heartbeat is sent every
+        15 seconds.
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    CsrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Token returned by GET /api/session; required on every mutation.
+
+  parameters:
+    RepoId:
+      name: repoId
+      in: path
+      required: true
+      schema:
+        type: string
+    PrId:
+      name: prId
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+    DraftId:
+      name: draftId
+      in: path
+      required: true
+      schema:
+        type: string
+    FindingId:
+      name: findingId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    AuthProblem:
+      description: Credential missing, expired, or insufficient
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationProblem:
+      description: Request or state validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: State conflict such as stale head, active run, or publish in flight
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: GitHub rate limit reached; retry after the reported reset
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Offline, Git missing, database unavailable, or unverified GitHub state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Session:
+      type: object
+      additionalProperties: false
+      required: [csrfToken, appVersion, ai, limits]
+      properties:
+        csrfToken:
+          type: string
+        appVersion:
+          type: string
+        ai:
+          type: object
+          additionalProperties: false
+          required: [configured, destinationKnown, model]
+          properties:
+            configured:
+              type: boolean
+            destinationKnown:
+              type: boolean
+            destinationLabel:
+              type: [string, "null"]
+            model:
+              type: string
+            mayLeaveMachine:
+              type: boolean
+        limits:
+          type: object
+          additionalProperties: false
+          properties:
+            maxInlineFindings:
+              type: integer
+              const: 15
+            maxSummaryChars:
+              type: integer
+              const: 60000
+            maxInlineCommentChars:
+              type: integer
+              const: 10000
+            maxDiffFiles:
+              type: integer
+              const: 400
+            maxDiffLines:
+              type: integer
+              const: 20000
+
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, git, database, online]
+      properties:
+        status:
+          type: string
+          enum: [ready, degraded]
+        git:
+          type: object
+          additionalProperties: false
+          required: [available, version]
+          properties:
+            available:
+              type: boolean
+            version:
+              type: [string, "null"]
+        database:
+          type: string
+          enum: [ok, migrating, error]
+        online:
+          type: boolean
+
+    Repository:
+      type: object
+      additionalProperties: false
+      required: [id, owner, name, visibility, defaultBranch, connectedAt, lastSyncStatus, aiAcknowledged]
+      properties:
+        id:
+          type: string
+        owner:
+          type: string
+        name:
+          type: string
+        visibility:
+          type: string
+          enum: [public, private, internal]
+        defaultBranch:
+          type: string
+        connectedAt:
+          type: string
+          format: date-time
+        lastSuccessfulSyncAt:
+          type: [string, "null"]
+          format: date-time
+        lastSyncStatus:
+          type: string
+          enum: [never, succeeded, partial, failed]
+        aiAcknowledged:
+          type: boolean
+        capabilities:
+          type: object
+          additionalProperties:
+            type: boolean
+
+    ConnectRepositoryRequest:
+      type: object
+      additionalProperties: false
+      required: [owner, name]
+      properties:
+        owner:
+          type: string
+          minLength: 1
+          maxLength: 100
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+
+    AiAcknowledgement:
+      type: object
+      additionalProperties: false
+      required: [acknowledged, destinationKnown]
+      properties:
+        acknowledged:
+          type: boolean
+        destinationKnown:
+          type: boolean
+        destinationLabel:
+          type: [string, "null"]
+        acknowledgedAt:
+          type: [string, "null"]
+          format: date-time
+
+    SyncRun:
+      type: object
+      additionalProperties: false
+      required: [id, repoId, status, startedAt]
+      properties:
+        id:
+          type: string
+        repoId:
+          type: string
+        status:
+          type: string
+          enum: [running, succeeded, partial, failed]
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: [string, "null"]
+          format: date-time
+        openSeen:
+          type: integer
+        closedSeen:
+          type: integer
+        rateLimitResetAt:
+          type: [string, "null"]
+          format: date-time
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/Error"
+            - type: "null"
+
+    Board:
+      type: object
+      additionalProperties: false
+      required: [lanes, offline, stale]
+      properties:
+        lanes:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/Lane"
+        repositories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Repository"
+        lastSyncAt:
+          type: [string, "null"]
+          format: date-time
+        offline:
+          type: boolean
+        stale:
+          type: boolean
+        message:
+          type: [string, "null"]
+
+    Lane:
+      type: object
+      additionalProperties: false
+      required: [name, count, cards]
+      properties:
+        name:
+          type: string
+          enum: [Draft, "In review", "Request changes", Approved, Done]
+        count:
+          type: integer
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoardCard"
+
+    BoardCard:
+      type: object
+      additionalProperties: false
+      required: [id, number, title, author, repository, lane, isDraft, updatedAt, checksState, mergeability, needsMyReview]
+      properties:
+        id:
+          type: string
+        number:
+          type: integer
+        title:
+          type: string
+        author:
+          type: string
+        repository:
+          type: object
+          additionalProperties: false
+          required: [id, owner, name]
+          properties:
+            id:
+              type: string
+            owner:
+              type: string
+            name:
+              type: string
+        lane:
+          type: string
+          enum: [Draft, "In review", "Request changes", Approved, Done]
+        state:
+          type: string
+          enum: [open, merged, closed, inaccessible]
+        isDraft:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        changedFiles:
+          type: integer
+        labels:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name]
+            properties:
+              name:
+                type: string
+              color:
+                type: string
+        checksState:
+          type: string
+          enum: [failing, pending, passing, neutral, none]
+        mergeability:
+          type: string
+          enum: [mergeable, conflicting, unknown]
+        reviewDecision:
+          type: [string, "null"]
+          enum: [APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, null]
+        requestedReviewers:
+          type: array
+          items:
+            type: string
+        requestedTeams:
+          type: array
+          items:
+            type: string
+        needsMyReview:
+          type: boolean
+        teamRequestIndeterminate:
+          type: boolean
+
+    PullRequestDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - number
+        - title
+        - author
+        - repository
+        - lane
+        - isDraft
+        - updatedAt
+        - checksState
+        - mergeability
+        - needsMyReview
+        - body
+        - baseRef
+        - headRef
+        - headSha
+        - baseSha
+      properties:
+        id:
+          type: string
+        number:
+          type: integer
+        title:
+          type: string
+        author:
+          type: string
+        repository:
+          type: object
+          additionalProperties: false
+          required: [id, owner, name]
+          properties:
+            id:
+              type: string
+            owner:
+              type: string
+            name:
+              type: string
+        lane:
+          type: string
+          enum: [Draft, "In review", "Request changes", Approved, Done]
+        state:
+          type: string
+          enum: [open, merged, closed, inaccessible]
+        isDraft:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        changedFiles:
+          type: integer
+        labels:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name]
+            properties:
+              name:
+                type: string
+              color:
+                type: string
+        checksState:
+          type: string
+          enum: [failing, pending, passing, neutral, none]
+        mergeability:
+          type: string
+          enum: [mergeable, conflicting, unknown]
+        reviewDecision:
+          type: [string, "null"]
+          enum: [APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, null]
+        requestedReviewers:
+          type: array
+          items:
+            type: string
+        requestedTeams:
+          type: array
+          items:
+            type: string
+        needsMyReview:
+          type: boolean
+        teamRequestIndeterminate:
+          type: boolean
+        body:
+          type: string
+        baseRef:
+          type: string
+        headRef:
+          type: string
+        headSha:
+          type: string
+        baseSha:
+          type: string
+        requestedTeamsDetailed:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              org:
+                type: string
+              slug:
+                type: string
+              indeterminate:
+                type: boolean
+        diffStatus:
+          type: string
+          enum: [none, preparing, ready, stale, invalid]
+        activeRunId:
+          type: [string, "null"]
+        draftId:
+          type: [string, "null"]
+        lastSyncedAt:
+          type: string
+          format: date-time
+
+    Diff:
+      type: object
+      additionalProperties: false
+      required: [headSha, baseSha, mergeBaseSha, verified, stale, truncated, files]
+      properties:
+        headSha:
+          type: string
+        baseSha:
+          type: string
+        mergeBaseSha:
+          type: string
+        verified:
+          type: boolean
+        stale:
+          type: boolean
+        truncated:
+          type: boolean
+        truncatedReason:
+          type: [string, "null"]
+        files:
+          type: array
+          maxItems: 400
+          items:
+            $ref: "#/components/schemas/DiffFile"
+
+    DiffStatus:
+      type: object
+      additionalProperties: false
+      required: [prId, headSha, status, stale, verified]
+      properties:
+        prId:
+          type: string
+        headSha:
+          type: string
+        status:
+          type: string
+          enum: [queued, preparing, ready, stale, invalid]
+        phase:
+          type: string
+          enum: [fetch, merge_base, diff, files, done]
+        progress:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        stale:
+          type: boolean
+        verified:
+          type: boolean
+        truncated:
+          type: boolean
+        fileCount:
+          type: integer
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/Error"
+            - type: "null"
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiffFile:
+      type: object
+      additionalProperties: false
+      required: [path, changeType, additions, deletions, binary, symlink, submodule, truncated]
+      properties:
+        path:
+          type: string
+        previousPath:
+          type: [string, "null"]
+        changeType:
+          type: string
+          enum: [added, modified, deleted, renamed, copied, mode_changed, unmerged]
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        binary:
+          type: boolean
+        symlink:
+          type: boolean
+        submodule:
+          type: boolean
+        truncated:
+          type: boolean
+
+    DiffFileContent:
+      type: object
+      additionalProperties: false
+      required: [path, headSha, changeType, binary, truncated, hunks]
+      properties:
+        path:
+          type: string
+        previousPath:
+          type: [string, "null"]
+        headSha:
+          type: string
+        changeType:
+          type: string
+          enum: [added, modified, deleted, renamed, copied, mode_changed, unmerged]
+        binary:
+          type: boolean
+        truncated:
+          type: boolean
+        symlinkTarget:
+          type: [string, "null"]
+        submoduleSha:
+          type: [string, "null"]
+        hunks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiffHunk"
+
+    DiffHunk:
+      type: object
+      additionalProperties: false
+      required: [oldStart, oldLines, newStart, newLines, lines]
+      properties:
+        oldStart:
+          type: integer
+        oldLines:
+          type: integer
+        newStart:
+          type: integer
+        newLines:
+          type: integer
+        lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [kind, text]
+            properties:
+              kind:
+                type: string
+                enum: [context, added, deleted]
+              oldLine:
+                type: [integer, "null"]
+              newLine:
+                type: [integer, "null"]
+              text:
+                type: string
+
+    MarkReadyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadSha, confirmed]
+      properties:
+        expectedHeadSha:
+          type: string
+          pattern: "^[0-9a-f]{40}$"
+        confirmed:
+          type: boolean
+          const: true
+
+    ReviewRun:
+      type: object
+      additionalProperties: false
+      required: [id, prId, headSha, status, phase]
+      properties:
+        id:
+          type: string
+        prId:
+          type: string
+        headSha:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled, interrupted]
+        phase:
+          type: string
+          enum: [waiting, preparing, building_context, calling_model, validating, finalizing, done]
+        progress:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        verdict:
+          type: [string, "null"]
+          enum: [approve, comment, request_changes, null]
+        summary:
+          type: [string, "null"]
+        usage:
+          type: object
+          additionalProperties: false
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+        costUsd:
+          type: [number, "null"]
+        stale:
+          type: boolean
+        interrupted:
+          type: boolean
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/Error"
+            - type: "null"
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Finding"
+        testsMissing:
+          type: array
+          items:
+            type: string
+        filesReviewed:
+          type: array
+          items:
+            type: string
+        filesSkipped:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, reason]
+            properties:
+              path:
+                type: string
+              reason:
+                type: string
+
+    Finding:
+      type: object
+      additionalProperties: false
+      required: [id, source, path, side, line, severity, category, title, explanation, confidence, validationStatus]
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+          enum: [ai, manual]
+        path:
+          type: string
+        side:
+          type: string
+          enum: [LEFT, RIGHT]
+        line:
+          type: integer
+          minimum: 1
+        severity:
+          type: string
+          enum: [critical, high, medium, low, nit]
+        category:
+          type: string
+          enum: [bug, security, performance, concurrency, error_handling, api_contract, tests, maintainability, style]
+        title:
+          type: string
+        explanation:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        quotedCode:
+          type: [string, "null"]
+        suggestion:
+          type: [string, "null"]
+        validationStatus:
+          type: string
+          enum: [pending, valid, reanchored, demoted, invalid]
+        resolvedAnchor:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [path, side, line]
+              properties:
+                path:
+                  type: string
+                side:
+                  type: string
+                  enum: [LEFT, RIGHT]
+                line:
+                  type: integer
+            - type: "null"
+
+    FindingCreate:
+      type: object
+      additionalProperties: false
+      required: [path, side, line, severity, category, title, explanation, confidence]
+      properties:
+        path:
+          type: string
+        side:
+          type: string
+          enum: [LEFT, RIGHT]
+        line:
+          type: integer
+          minimum: 1
+        severity:
+          type: string
+          enum: [critical, high, medium, low, nit]
+        category:
+          type: string
+          enum: [bug, security, performance, concurrency, error_handling, api_contract, tests, maintainability, style]
+        title:
+          type: string
+          maxLength: 200
+        explanation:
+          type: string
+          maxLength: 4000
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        suggestion:
+          type: string
+          maxLength: 1000
+
+    FindingPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        decision:
+          type: string
+          enum: [accepted, dismissed]
+        inlineSelected:
+          type: boolean
+        editedTitle:
+          type: [string, "null"]
+          maxLength: 200
+        editedExplanation:
+          type: [string, "null"]
+          maxLength: 4000
+        editedSuggestion:
+          type: [string, "null"]
+          maxLength: 1000
+        editedPath:
+          type: [string, "null"]
+        editedSide:
+          type: [string, "null"]
+          enum: [LEFT, RIGHT, null]
+        editedLine:
+          type: [integer, "null"]
+          minimum: 1
+
+    DraftFinding:
+      type: object
+      additionalProperties: false
+      required: [findingId, decision, inlineSelected, finding]
+      properties:
+        findingId:
+          type: string
+        decision:
+          type: string
+          enum: [accepted, dismissed]
+        inlineSelected:
+          type: boolean
+        finding:
+          $ref: "#/components/schemas/Finding"
+        edits:
+          type: object
+          additionalProperties: false
+          properties:
+            title:
+              type: [string, "null"]
+            explanation:
+              type: [string, "null"]
+            suggestion:
+              type: [string, "null"]
+            path:
+              type: [string, "null"]
+            side:
+              type: [string, "null"]
+            line:
+              type: [integer, "null"]
+
+    ReviewDraft:
+      type: object
+      additionalProperties: false
+      required: [id, prId, runId, summary, event, status, targetHeadSha, findings, counts, publishability]
+      properties:
+        id:
+          type: string
+        prId:
+          type: string
+        runId:
+          type: string
+        summary:
+          type: string
+          maxLength: 60000
+        event:
+          type: string
+          enum: [comment, request_changes, approve]
+        status:
+          type: string
+          enum: [building, previewed, publishing, published, failed, uncertain, blocked]
+        targetHeadSha:
+          type: string
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/DraftFinding"
+        counts:
+          type: object
+          additionalProperties: false
+          required: [inline, summaryOnly, demoted, stale]
+          properties:
+            inline:
+              type: integer
+            summaryOnly:
+              type: integer
+            demoted:
+              type: integer
+            stale:
+              type: integer
+        publishability:
+          type: object
+          additionalProperties: false
+          required: [publishable, reasons]
+          properties:
+            publishable:
+              type: boolean
+            reasons:
+              type: array
+              items:
+                type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    DraftPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        summary:
+          type: string
+          maxLength: 60000
+        event:
+          type: string
+          enum: [comment, request_changes, approve]
+
+    Preview:
+      type: object
+      additionalProperties: false
+      required: [draftId, event, headSha, headVerified, summary, inlineComments, warnings, omittedFindings, previewToken, expiresAt]
+      properties:
+        draftId:
+          type: string
+        pr:
+          type: object
+          additionalProperties: false
+          properties:
+            number:
+              type: integer
+            title:
+              type: string
+            repository:
+              type: string
+        event:
+          type: string
+          enum: [comment, request_changes, approve]
+        headSha:
+          type: string
+        headVerified:
+          type: boolean
+        summary:
+          type: string
+        inlineComments:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, side, line, body]
+            properties:
+              path:
+                type: string
+              side:
+                type: string
+                enum: [LEFT, RIGHT]
+              line:
+                type: integer
+              body:
+                type: string
+                maxLength: 10000
+        warnings:
+          type: array
+          items:
+            type: string
+        omittedFindings:
+          type: integer
+        previewToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      required: [previewToken, confirmed]
+      properties:
+        previewToken:
+          type: string
+        confirmed:
+          type: boolean
+          const: true
+
+    PublishResult:
+      type: object
+      additionalProperties: false
+      required: [postId, status]
+      properties:
+        postId:
+          type: string
+        status:
+          type: string
+          enum: [pending, succeeded, failed, uncertain, duplicate_detected]
+        githubReviewId:
+          type: [string, "null"]
+        url:
+          type: [string, "null"]
+        fallback:
+          type: [string, "null"]
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/Error"
+            - type: "null"
+
+    ActivityEvent:
+      type: object
+      additionalProperties: false
+      required: [id, type, occurredAt, summary]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - repo_connected
+            - sync_completed
+            - mark_ready
+            - review_started
+            - review_completed
+            - review_failed
+            - review_cancelled
+            - finding_triaged
+            - draft_previewed
+            - publish_attempted
+            - publish_succeeded
+            - publish_failed
+            - publish_uncertain
+        occurredAt:
+          type: string
+          format: date-time
+        summary:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - AUTH_MISSING
+            - AUTH_INVALID
+            - PERMISSION_DENIED
+            - RATE_LIMITED
+            - OFFLINE
+            - NOT_FOUND
+            - CONFLICT
+            - STALE_HEAD
+            - PR_CLOSED
+            - PREVIEW_EXPIRED
+            - PREVIEW_MISMATCH
+            - PUBLISH_IN_FLIGHT
+            - AI_FAILED
+            - AI_INVALID_OUTPUT
+            - GIT_MISSING
+            - GIT_PREP_FAILED
+            - SECRET_EXCLUDED
+            - VALIDATION_FAILED
+            - INTERNAL
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retryAfter:
+          type: [string, "null"]
+          format: date-time
