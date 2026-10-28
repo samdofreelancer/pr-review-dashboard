@@ -22,7 +22,7 @@ Build a local-first web application for one GitHub reviewer on Windows. A loopba
 
 **Project Type**: Local web application (Node backend + React SPA served by the backend in production)
 
-**Performance Goals**: Sync 5 repositories / 100 open PRs under 30 s excluding rate-limit wait (SC-003); first preparation of a repository with a working tree up to 1 GB within 10 min p90, then diff open ≤2 s and file switch ≤1 s p95 (SC-004); AI review ≤3 min p90 for PRs under 500 changed lines (SC-005); triage 10 findings to confirmation under 3 min (SC-009)
+**Performance Goals**: Sync 5 repositories / 100 open PRs under 30 s excluding rate-limit wait, reported separately (SC-003); first preparation of a repository with a working tree up to 1 GB within 10 min p90, then diff open ≤2 s and file switch ≤1 s p95 (SC-004); AI orchestration from verified head through validated draft ≤60 s p90 and end-to-end review ≤3 min p90 when provider p90 latency is ≤90 s, excluding provider outages, provider rate limits, and GitHub rate-limit waits (SC-005); triage 10 findings to confirmation under 3 min with measured timing (SC-009)
 
 **Constraints**: No PR code execution, installs, tests, scripts, hooks, filters, or submodules (FR-037/051); user checkout never mutated (FR-036); credential never persisted, displayed, or logged (FR-003/090/095); loopback-only with Host/Origin/CSRF checks; offline read-only board (FR-093); one active review run per PR and one publish in flight per draft (FR-056/086); retention 14 days for local copies and 30 days for diagnostics (FR-049/091); diff limits 400 files, 20,000 changed lines, 1 MiB per text file, 20 MiB total text; AI context budget 300,000 characters; review summary 60,000 characters and inline comment 10,000 characters; top 15 inline findings
 
@@ -39,7 +39,7 @@ No constitution has been ratified: `.specify/memory/constitution.md` does not ex
 | Credential secrecy | FR-003, FR-090, FR-095 | Token resolved per request in memory; Git auth through an ephemeral askpass helper; structured logging redaction; no credential columns, UI fields, activity entries, or diagnostics | PASS |
 | Read-only AI, one endpoint | FR-051, FR-052 | Single-shot OpenAI-compatible HTTP request with an abort signal; no tool loop, no web access, no file writes; provider destination disclosed per repository | PASS |
 | Human-approved publishing | FR-077 | Server-generated preview plus a short-lived preview token; publish requires that token and explicit confirmation; AI code paths cannot call publish | PASS |
-| Idempotent publishing | FR-081–FR-086 | Per-run hidden marker in the review body; marker pre-check; single-flight DB lock; one anchor-rejection retry; uncertain-outcome verification | PASS |
+| Idempotent publishing | FR-081–FR-086 | Per-draft hidden marker in the review body; marker pre-check; single-flight DB lock; one anchor-rejection retry; uncertain-outcome verification with a bounded residual race documented in spec Assumptions | PASS |
 | Untrusted input | FR-053, FR-068 | Delimited untrusted context, path denylist, schema validation of AI output, AST-level Markdown sanitization, no raw HTML | PASS |
 | Accessibility | FR-032, FR-098 | dnd-kit keyboard sensor plus card action menus; Radix focus management; `aria-live` progress; status conveyed by text and icon, not color alone | PASS |
 | Data lifecycle | FR-049, FR-091, FR-092 | Cleanup job for copies and diagnostics; audit retained until disconnect; disconnect cascades DB rows and cache directories | PASS |

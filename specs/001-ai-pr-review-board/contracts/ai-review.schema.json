@@ -131,7 +131,24 @@
           "maxLength": 1000,
           "description": "Optional replacement for exactly one RIGHT-side line."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "side": {
+                "const": "LEFT"
+              }
+            },
+            "required": ["side"]
+          },
+          "then": {
+            "not": {
+              "required": ["suggestion"]
+            }
+          }
+        }
+      ]
     },
     "skipped": {
       "type": "object",

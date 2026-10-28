@@ -320,6 +320,33 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationProblem"
 
+  /api/prs/{prId}/draft:
+    parameters:
+      - $ref: "#/components/parameters/PrId"
+    post:
+      tags: [drafts]
+      operationId: createManualDraft
+      description: Create a manual review draft for board-initiated approve or request-changes without an AI run
+      security:
+        - CsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualDraftCreate"
+      responses:
+        "201":
+          description: Manual draft bound to the verified head
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDraft"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+
   /api/prs/{prId}/review-runs:
     parameters:
       - $ref: "#/components/parameters/PrId"
@@ -1198,6 +1225,18 @@ components:
           type: boolean
           const: true
 
+    ManualDraftCreate:
+      type: object
+      additionalProperties: false
+      required: [event]
+      properties:
+        event:
+          type: string
+          enum: [comment, request_changes, approve]
+        summary:
+          type: string
+          maxLength: 60000
+
     ReviewRun:
       type: object
       additionalProperties: false
@@ -1420,14 +1459,17 @@ components:
     ReviewDraft:
       type: object
       additionalProperties: false
-      required: [id, prId, runId, summary, event, status, targetHeadSha, findings, counts, publishability]
+      required: [id, prId, origin, runId, summary, event, status, targetHeadSha, findings, counts, publishability]
       properties:
         id:
           type: string
         prId:
           type: string
-        runId:
+        origin:
           type: string
+          enum: [ai, manual]
+        runId:
+          type: [string, "null"]
         summary:
           type: string
           maxLength: 60000

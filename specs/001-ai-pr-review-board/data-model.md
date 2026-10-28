@@ -21,8 +21,8 @@ repositories 1──N pull_requests 1──N pull_request_reviews
      │                │
      │                ├──N local_copies
      │                ├──N review_runs 1──N findings
-     │                │        │ 1
-     │                │        └──1 review_drafts 1──N draft_findings
+     │                │        │ 0..1
+     │                │        └──0..1 review_drafts 1──N draft_findings
      │                │                    └──N review_posts
      │                └──N activity_events
      ├──N sync_runs
@@ -32,7 +32,7 @@ repositories 1──N pull_requests 1──N pull_request_reviews
 artifacts 1──0..1 review_runs (diagnostics)
 ```
 
-Spec entities map to tables: Repository → `repositories`; Pull request → `pull_requests` + `pull_request_reviews`; Local inspection → `local_copies`; Review run → `review_runs`; Finding → `findings` + `draft_findings`; Review draft → `review_drafts`; Review post → `review_posts`; Activity event → `activity_events`; Repository acknowledgement → `repo_acknowledgements`.
+Spec entities map to tables: Repository → `repositories`; Pull request → `pull_requests` + `pull_request_reviews`; Local copy → `local_copies`; Review run → `review_runs`; Finding → `findings` + `draft_findings`; Review draft → `review_drafts`; Review post → `review_posts`; Activity event → `activity_events`; Repository acknowledgement → `repo_acknowledgements`.
 
 ## Tables
 
@@ -221,7 +221,7 @@ Diagnostics expire in 30 days (FR-066/091).
 | error_code | TEXT | NULL |
 | error_message | TEXT | NULL |
 
-Partial unique index: one row per `pr_id` with `status IN ('queued','running')` (FR-056). Index `(pr_id, started_at DESC)`; index `(status)`. A run is publishable only when `status = completed`, `stale_at IS NULL`, and `head_sha` still matches GitHub. Verdict is advisory and never selects a publish event (FR-064/073).
+Partial unique index: one row per `pr_id` with `status IN ('queued','running')` (FR-056). Index `(pr_id, started_at DESC)`; index `(status)`. A run can seed an AI-origin draft only when `status = completed`, `stale_at IS NULL`, and `head_sha` still matches GitHub. Verdict is advisory and never selects a publish event (FR-064/073).
 
 ### findings
 
@@ -255,10 +255,11 @@ AI rows are immutable; user edits live in `draft_findings` so the original outpu
 |---|---|---|
 | id | TEXT | PK |
 | pr_id | TEXT | FK → pull_requests, ON DELETE CASCADE |
-| run_id | TEXT | NOT NULL, UNIQUE; FK → review_runs |
-| summary | TEXT | NOT NULL; editable, ≤60,000 chars before publish |
+| run_id | TEXT | NULL; UNIQUE when not null; FK → review_runs |
+| origin | TEXT | NOT NULL; `ai` \| `manual` |
+| summary | TEXT | NOT NULL; empty allowed for a manual draft; editable, ≤60,000 chars before publish |
 | event | TEXT | `comment` \| `request_changes` \| `approve` |
-| marker | TEXT | NOT NULL, UNIQUE; `<!-- pr-review-dashboard:run=<runId> -->` |
+| marker | TEXT | NOT NULL, UNIQUE; `<!-- pr-review-dashboard:draft=<draftId> -->` |
 | target_head_sha | TEXT | NOT NULL |
 | status | TEXT | `building` \| `previewed` \| `publishing` \| `published` \| `failed` \| `uncertain` \| `blocked` |
 | preview_token_hash | TEXT | NULL; SHA-256 |
@@ -267,7 +268,7 @@ AI rows are immutable; user edits live in `draft_findings` so the original outpu
 | created_at | TEXT | NOT NULL |
 | updated_at | TEXT | NOT NULL |
 
-One draft per completed run. A draft is blocked when the PR is closed/merged/inaccessible/offline, the head differs, or the run is stale (FR-076/078).
+An AI-origin draft has exactly one completed run; a manual draft has `run_id = NULL` and `origin = manual`. A draft is blocked when the PR is closed/merged/inaccessible/offline, the head differs, or (for AI origin) the run is stale (FR-030/070/076/078).
 
 ### draft_findings
 
@@ -361,7 +362,7 @@ True when `requested_users_json` contains the viewer login, or a requested team'
 
 ### Publishability
 
-`publishable = draft.status in {building, previewed} AND run.status == completed AND run.stale_at IS NULL AND draft.target_head_sha == verified_github_head AND pr.state == open AND pr.is_draft is compatible with event AND online`.
+`publishable = draft.status in {building, previewed} AND draft.target_head_sha == verified_github_head AND pr.state == open AND pr.is_draft is compatible with event AND online AND (draft.origin == manual OR (run.status == completed AND run.stale_at IS NULL))`.
 
 Own-PR, draft-approval, and closed/merged restrictions surface as blocked reasons with the comment fallback (FR-079/080).
 
@@ -412,7 +413,7 @@ Terminal state requires a complete closed/merged refresh before a PR may be mark
 ## Business invariants
 
 1. One active review run per PR and one pending post per draft, enforced by partial unique indexes.
-2. A draft exists only for a completed, non-stale run and one target head SHA; any head/state change blocks it.
+2. An AI-origin draft exists only for a completed, non-stale run; a manual draft is bound to a verified head. Both bind one target head SHA, and any head/state change blocks them.
 3. Findings are immutable after creation; triage edits are overrides in `draft_findings`.
 4. Inline eligibility is single-line LEFT/RIGHT changed lines only; context, multi-line, and outside-change-block anchors are demoted (FR-060).
 5. Deduplication keeps the highest-confidence finding per normalized key; inline selection is deterministic (FR-062/063).

@@ -31,14 +31,14 @@ Environment (set in the shell; the app provides no token or model UI):
 | `AI_BASE_URL` | for AI review | — | OpenAI-compatible base URL, e.g. `http://127.0.0.1:11434/v1` |
 | `AI_MODEL` | for AI review | — | Model identity stored on each run |
 | `AI_API_KEY` | remote providers | — | Sent only to the AI endpoint |
-| `AI_TIMEOUT_MS` | no | `180000` | Review timeout; cancellation still works |
+| `AI_TIMEOUT_MS` | no | `180000` | Review timeout ceiling; cancellation still works |
 | `AI_MAX_CONTEXT_CHARS` | no | `300000` | Context budget |
 | `AI_PRICE_INPUT_PER_MTOK` | no | — | Enables cost display when usage is reported |
 | `AI_PRICE_OUTPUT_PER_MTOK` | no | — | Enables cost display when usage is reported |
 | `PORT` | no | `0` (random) | Loopback port |
 | `APP_DATA_DIR` | no | `%LOCALAPPDATA%\PRReviewDashboard` | Data root for tests or portable runs |
 
-Data is written under `data\app.db`, `repos\`, `artifacts\`, and `logs\`. No GitHub or AI key is written there.
+`AI_TIMEOUT_MS` is a safety ceiling, not a performance target: SC-005 assumes a provider p90 of at most 90 seconds and orchestration from verified head to validated draft within 60 seconds p90, independent of this value. Data is written under `data\app.db`, `repos\`, `artifacts\`, and `logs\`. No GitHub or AI key is written there.
 
 ## 3. Run
 
@@ -57,7 +57,7 @@ Startup checks Git availability, runs migrations, marks interrupted work, and st
 1. Open the app. If the credential is missing or invalid, the app shows a repair message and does not offer an in-app token form (FR-001/004).
 2. Connect a repository using the picker or `owner/repository` (FR-006).
 3. Wait for the first sync. The board shows five lanes, visible counts, freshness, and last successful sync (FR-019/020).
-4. Open a pull request, run an AI review, acknowledge the AI destination for that repository on first use, triage findings, preview, and publish (FR-008/025/077).
+4. Open a pull request, run an AI review, acknowledge the AI destination for that repository on first use, triage findings, preview, and publish (FR-008/025/077). Approve or Request changes can also start from a board card without an AI run, which creates a manual draft bound to the verified head (FR-030).
 
 ## 5. Automated validation
 
@@ -86,14 +86,15 @@ Each scenario maps to the spec. Run `npm run test:e2e -- --grep "<scenario>"` wh
 | V8 | AI review lifecycle | Fake AI with valid output and one cancel run | Start review; cancel a second run | Progress, phase, elapsed, tokens/cost when reported; cancelled run discards partial findings; new run gets a new identity (FR-054/055/056) |
 | V9 | Anchor validation and cap | Fake output with invalid path/line, quote re-anchor, duplicate, 20 valid findings | Run review; inspect draft | Invalid anchors demoted; unique quote re-anchored; duplicates collapsed; top 15 inline by severity/confidence/path/line; rest in summary (FR-061/062/063, SC-006) |
 | V10 | Untrusted input | PR modifies `.env`, `AGENTS.md`, `.cursor/rules`, and contains prompt-injection text and HTML | Run review; inspect AI request fixture and UI | Denylisted content absent from AI payload; human diff still shows it with warning; AI Markdown sanitized; no state change from injected text (FR-041/053/068, SC-013) |
-| V11 | Triage and preview | Completed run with valid, demoted, and manual findings | Accept/dismiss/edit/add; preview | Counts update immediately; original AI output retained; preview shows event, commit, summary, every inline comment, warnings; no post before confirmation (FR-070/074/075) |
+| V11 | Triage and preview | Completed run with valid, demoted, and manual findings | Accept/dismiss/edit/add ten findings; preview; reach confirmation | Counts update immediately; original AI output retained; preview shows event, commit, summary, every inline comment, warnings; no post before confirmation; triage to confirmation under three minutes (FR-070/074/075, SC-009) |
 | V12 | Publish paths | Own PR; draft PR; normal PR | Publish approve/request changes/comment | Own PR and draft approval offer comment fallback with confirmation; normal publish creates one review with only accepted findings; activity and PR refreshed (FR-079/080/087, SC-007/008) |
 | V13 | Anchor rejection | Fake GitHub rejects one inline anchor with 422 | Publish | Rejected comment moved to summary; valid comments preserved; one retry with same marker; user told what changed (FR-084) |
 | V14 | Timeout, restart, multi-tab | Fake GitHub times out after accepting; restart during run/publish; publish from two tabs | Retry from both tabs; restart app | At most one review; uncertain post requires marker check and confirmation; interrupted run not publishable; second tab sees same result (FR-083/086/088/094, SC-007) |
 | V15 | Keyboard-only | Any populated board | Complete connect-to-publish journey without mouse | All actions reachable; focus visible; status conveyed by text/icon; no drag required (FR-032/098, SC-014) |
 | V16 | Redaction and retention | Token, secret-looking files, diagnostics, old copies | Inspect UI, logs, DB, artifacts; advance clock in tests | Token absent everywhere; diagnostics/copies expire at 30/14 days; audit remains until disconnect (FR-091/095, SC-013) |
-| V17 | Performance | Seeded 5 repos/100 PRs; 1 GB fixture repo; <500-line PR | Measure sync, first prep, diff open/switch, AI review | SC-003/004/005 targets; rate-limit waits excluded and shown as retry/reset |
+| V17 | Performance | Seeded 5 repos/100 PRs; 1 GB fixture repo; <500-line PR | Measure sync, first prep, diff open/switch, AI review | SC-003/004/005 targets; rate-limit waits excluded, reported separately with retry/reset time; SC-005 split into provider p90 (≤90 s) and orchestration p90 (≤60 s) |
 | V18 | Language | Any review with findings | Inspect UI and generated content | UI labels/errors Vietnamese; review summary/comments English; no language selector (FR-065, SC-011) |
+| V19 | Board-initiated manual draft | Open PR with no AI run | Card menu → Approve or Request changes → composer → preview → publish | Manual draft created with no run, a unique marker, and the verified head; the chosen event is preselected; own-PR/draft fallback offers Comment; exactly one review is created (FR-030/079/081/087) |
 
 ## 7. Live smoke procedure
 
@@ -126,4 +127,4 @@ Close the app, then remove `%LOCALAPPDATA%\PRReviewDashboard` (or the `APP_DATA_
 
 ## 10. Acceptance evidence
 
-Store the automated run for each scenario plus a short manual note in the feature folder: command, fixture revision, app version, and observed result. SC-001–SC-015 are covered by V1–V18; any scenario that cannot run (for example, a real rate-limit window) must be recorded as not executed rather than marked passing.
+Store the automated run for each scenario plus a short manual note in the feature folder: command, fixture revision, app version, and observed result. SC-001–SC-015 are covered by V1–V19; any scenario that cannot run (for example, a real rate-limit window) must be recorded as not executed rather than marked passing.

@@ -15,8 +15,9 @@
 - **Local copy**: An isolated local retrieval of one pull request head commit used for inspection and AI review. It is separate from the user's normal repository checkout.
 - **Review run**: One AI-assisted analysis attempt bound to one pull request and one head commit.
 - **Finding**: One structured review observation produced by a run or added manually, with a location, severity, category, explanation, and triage state.
-- **Review draft**: The human-curated set of accepted findings, summary, selected GitHub event, and target commit.
+- **Review draft**: The human-curated set of accepted findings, summary, selected GitHub event, and target commit. A draft is either AI-origin (created from a completed review run) or manual (created from the board review composer).
 - **Publish**: Submit one review draft to GitHub as a single review.
+- **Review post**: One publish attempt or successful GitHub review, identified by the draft's hidden idempotency marker.
 - **Stale**: A local diff, finding set, review run, or draft whose head commit or pull request state no longer matches GitHub.
 - **Anchor**: A file path, side, and line number identifying where an inline review comment will attach.
 
@@ -176,7 +177,7 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 - **FR-023**: Mergeability MUST be displayed as mergeable, conflicting, or unknown; an unknown value MUST NOT be treated as mergeable or conflicting.
 - **FR-024**: Checks MUST be displayed as one aggregate state using this precedence: any failed check maps to failing; otherwise any pending check maps to pending; otherwise any successful check maps to passing; otherwise, when checks or statuses exist but are all neutral or skipped, the aggregate maps to neutral; otherwise no checks maps to none. Both check runs and commit statuses are included, and required-check filtering is not separate in MVP.
 - **FR-025**: After any GitHub state-changing action, the app MUST re-fetch the affected pull request rather than assuming success or updating the lane optimistically.
-- **FR-026**: When the device is offline or a refresh fails, the board MUST be readable from the last known data with an explicit offline/stale banner; synchronization, AI review, and publishing MUST be disabled until connectivity and GitHub state can be verified.
+- **FR-026**: When a refresh fails while online or GitHub state cannot be verified, the board MUST remain readable from the last known data with an explicit stale banner and a retry action. Offline behavior, including disabled synchronization, AI review, and publishing, is defined by FR-093.
 
 ### Board Actions and Pull Request Detail
 
@@ -200,7 +201,7 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 
 - **FR-028**: Every GitHub-changing transition MUST require explicit confirmation that names the pull request and resulting GitHub action.
 - **FR-029**: Moving a draft to In review MUST mark the pull request ready for review on GitHub and MUST refresh before it appears in the new lane.
-- **FR-030**: Moving to Approved or Request changes MUST open the review composer with the matching event; it MUST NOT publish immediately.
+- **FR-030**: Moving to Approved or Request changes MUST open the review composer with the matching event and MUST NOT publish immediately. When no review draft exists, the composer MUST create a manual draft bound to the verified head so the user can add a summary and manual findings.
 - **FR-031**: Merging and closing pull requests from the board are outside MVP; the app MUST direct the user to GitHub for those actions and keep the Done lane read-only.
 - **FR-032**: Every drag action MUST also be available through a keyboard-accessible card action menu, with visible focus, accessible names, and status conveyed by more than color alone.
 - **FR-033**: The pull request detail surface MUST include Overview, Diff, AI review, and Activity; Overview shows the sanitized pull request body, author, branches, size, labels, reviewers, checks, mergeability, head commit, and last sync; Activity shows app-recorded events and the posted review result.
@@ -217,7 +218,7 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 - **FR-041**: The AI reviewer MUST NOT receive content from repository instruction or secret-bearing paths, including at minimum: `.env` and `.env.*`, `.git/**`, `.opencode/**`, repository `opencode.json` or `opencode.jsonc`, `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.cursor/rules/**`, and common credential or private-key files. The exact default denylist MUST be documented and configurable only by a trusted local setting.
 - **FR-042**: Symlinks MUST be displayed as links and never followed; submodules MUST be displayed as commit references and their content MUST NOT be fetched for review.
 - **FR-043**: Case-only renames and paths containing spaces, Unicode, or tabs MUST remain distinct and displayable.
-- **FR-044**: When a diff exceeds the supported size, file count, or rendering limit, the app MUST mark it truncated, preserve the file list and available portions, and direct the user to GitHub for the remainder.
+- **FR-044**: When a diff exceeds 400 changed files, 20,000 changed lines, 1 MiB per text file, or 20 MiB of total text, the app MUST mark it truncated, preserve the file list and available portions, and direct the user to GitHub for the remainder.
 - **FR-045**: The app MUST re-check GitHub head when the user opens a pull request's diff, when starting an AI review, at the end of a review run, and immediately before publishing.
 - **FR-046**: If head cannot be verified, the app MUST present the local diff as read-only/unverified and MUST block AI review and publishing.
 - **FR-047**: The displayed local diff MUST identify the commit it uses; if it differs from the board or GitHub, the app MUST show a stale warning.
@@ -229,7 +230,7 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 - **FR-050**: Users MUST be able to start an AI review for a selected pull request only after GitHub head and pull request state have been verified and the repository AI acknowledgement is current.
 - **FR-051**: The AI reviewer MUST be read-only and MUST NOT execute shell commands, modify files, follow symlinks, fetch submodules, invoke subagents, write to GitHub, or use network-capable tools such as web fetch or web search.
 - **FR-052**: The only external communication permitted during an AI review is the configured AI model endpoint. The app MUST disclose when that endpoint may receive pull request code outside the local machine.
-- **FR-053**: Pull request titles, descriptions, code, comments, labels, and repository files MUST be treated as untrusted data; instructions found inside them MUST NOT override the reviewer's operating rules.
+- **FR-053**: Pull request titles, descriptions, code, labels, and repository files included in the AI context MUST be treated as untrusted data; instructions found inside them MUST NOT override the reviewer's operating rules. GitHub conversation comments and review threads are not sent to the AI reviewer in MVP.
 - **FR-054**: A review run MUST expose status, current phase, elapsed time, cancellation, token usage, and cost when available.
 - **FR-055**: Cancellation MUST stop the run promptly, mark it cancelled rather than completed, discard partial findings from the publishable draft, and leave prior completed runs untouched.
 - **FR-056**: At most one active review run may exist per pull request; duplicate start requests MUST return the existing run. Starting a new run after a completed, failed, cancelled, or stale run MUST create a new run with a new identity.
@@ -246,14 +247,14 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 - **FR-063**: Only the top 15 valid findings may be proposed inline, ordered by severity, then confidence descending, then path ascending, then line ascending. Remaining findings and all demoted findings MUST be represented in the summary with their file and line when available, subject to the summary limit in FR-075.
 - **FR-064**: The review MUST include a verdict, summary, findings, tests-missing list, files reviewed, files skipped, commit identity, and run metadata. The summary MUST explain when no findings were produced and when files were skipped.
 - **FR-065**: Review summaries and finding content MUST be fixed to English in MVP. No language setting is provided; the interface remains Vietnamese.
-- **FR-066**: If the AI output is invalid, incomplete, times out, is cancelled, or the reviewer exits unsuccessfully, the app MUST mark the run failed or cancelled, preserve redacted diagnostic output for at most 30 days, and MUST NOT present partial output as a valid review.
+- **FR-066**: If the AI output is invalid, incomplete, or times out, or the reviewer exits unsuccessfully, the app MUST mark the run failed, preserve redacted diagnostic output for at most 30 days, and MUST NOT present partial output as a valid review. Cancellation behavior is defined by FR-055.
 - **FR-067**: If the app restarts while a review is running, the run MUST be marked interrupted and MUST NOT be publishable.
 - **FR-068**: AI-generated Markdown, links, HTML, and apparent instructions MUST be rendered as sanitized content and MUST NOT change application state, navigation, or permissions.
 - **FR-069**: If GitHub head changes during a run, the app MUST mark the run stale at completion or at the next head verification and MUST prevent publishing.
 
 ### Triage and Review Draft
 
-- **FR-070**: Users MUST be able to accept, dismiss, edit, manually add, and select findings for the review draft.
+- **FR-070**: Users MUST be able to accept, dismiss, edit, manually add, and select findings for the review draft. Users MUST also be able to create a manual draft from the review composer without starting an AI review.
 - **FR-071**: Manually added comments MUST either be summary-only or attach to an eligible added or deleted line using the same validation rules as AI findings.
 - **FR-072**: The review draft MUST show a live count of accepted inline comments and summary-only findings, and MUST distinguish valid, demoted, and stale findings.
 - **FR-073**: Users MUST be able to choose a review event of comment, request changes, or approve, subject to GitHub permissions and pull request state.
@@ -267,7 +268,7 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 - **FR-078**: The app MUST block publishing when the pull request is closed, merged, inaccessible, offline, unverified, or when its head commit differs from the reviewed commit.
 - **FR-079**: When the user authored the pull request, or GitHub otherwise disallows an approval or change request, the app MUST explain the restriction and offer a comment review with the same selected findings.
 - **FR-080**: When a draft pull request cannot be approved, the app MUST offer a comment-review fallback and preserve the user's selected event intent in the audit record.
-- **FR-081**: Each review draft MUST have a stable hidden idempotency marker derived from the immutable review run identity. The marker MUST be included in the GitHub review body, MUST NOT be visible in the rendered review, and MUST be stored with the draft and post record.
+- **FR-081**: Each review draft MUST have a stable hidden idempotency marker derived from the immutable review draft identity; for AI-origin drafts that identity incorporates the review run identity. The marker MUST be included in the GitHub review body, MUST NOT be visible in the rendered review, and MUST be stored with the draft and post record.
 - **FR-082**: Before publishing and before any retry with an uncertain outcome, the app MUST check existing GitHub reviews for the marker. If found, the app MUST treat the review as already published, display the existing result, and MUST NOT create another review.
 - **FR-083**: If a review request times out and no marker is found, the app MUST allow one explicit retry using the same marker. If a marker appears later, no further post may be made.
 - **FR-084**: If GitHub rejects one or more inline anchors, the app MUST move the rejected comments into the summary, retry once with valid comments preserved and the same marker, and report the fallback.
@@ -293,10 +294,10 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 
 - **Repository**: A connected GitHub repository, including owner, name, visibility, default branch, authentication capability, connection time, last successful synchronization, and AI processing acknowledgement.
 - **Pull request**: A current snapshot of GitHub pull request data, including body, commits, branches, size, checks aggregate, mergeability, labels, reviewers, review decision, terminal state, and derived lane.
-- **Local inspection**: An isolated local copy of one pull request head commit, including merge context, changed files, change blocks, line mappings, special-file metadata, preparation status, last access, and stale/invalid status. It is not the user's working checkout.
+- **Local copy**: An isolated retrieval of one pull request head commit, including merge context, changed files, change blocks, line mappings, special-file metadata, preparation status, last access, and stale/invalid status. It is not the user's working checkout.
 - **Review run**: One AI-assisted review attempt bound to a pull request and head commit, with immutable identity, status, phase, cancellation, provider/model identity, usage, cost, duration, redacted raw diagnostics, summary, findings, verdict, and interrupted/stale state. No deep-mode property exists in MVP.
 - **Finding**: A structured observation from a run or a human, with path, side, single line, severity, category, title, explanation, confidence, optional quoted code, optional single-line suggestion, validation result, deduplication fingerprint, and accepted/dismissed state.
-- **Review draft**: The curated accepted findings, summary, selected event, idempotency marker, reviewed commit, preview state, and publishability state.
+- **Review draft**: The curated accepted findings, summary, selected event, origin (AI run or manual), idempotency marker, reviewed commit, preview state, and publishability state.
 - **Review post**: A publication attempt or successful GitHub review, including external review identity, marker, event, commit, payload summary, response, fallback details, outcome, and timestamps.
 - **Activity event**: A local audit entry for synchronization, review runs, triage, publish attempts, fallbacks, and posted reviews associated with a repository or pull request.
 - **Repository acknowledgement**: A revocable record that the user approved sending that repository's eligible code to the disclosed AI destination.
@@ -307,11 +308,11 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 
 - **SC-001**: In a validation set of 50 pull requests spanning draft, in-review, review-required, changes-requested, approved, dismissed-approval, merged, and closed states, 100% appear in the lane that matches the defined mapping after synchronization.
 - **SC-002**: A user with an existing valid GitHub credential can connect a repository and reach a populated five-lane board in under two minutes without editing configuration files or entering a token in the app.
-- **SC-003**: Synchronizing five repositories containing up to 100 open pull requests completes in under 30 seconds on a 50 Mbps connection, and the board remains usable while synchronization is in progress.
+- **SC-003**: Synchronizing five repositories containing up to 100 open pull requests completes in under 30 seconds on a 50 Mbps connection, excluding time spent waiting on GitHub rate-limit responses, which MUST be reported separately with the retry or reset time; the board remains usable while synchronization is in progress.
 - **SC-004**: For PRs under 500 changed lines in repositories with a working tree up to 1 GB, the first local preparation completes within 10 minutes for at least 90% of attempts on a 50 Mbps connection; once prepared, the diff opens within two seconds and file switching responds within one second for at least 95% of interactions.
-- **SC-005**: For PRs under 500 changed lines, an AI review completes within three minutes for at least 90% of attempts, excluding configured provider outages or explicit rate limits.
+- **SC-005**: For PRs under 500 changed lines, an AI review completes within three minutes for at least 90% of attempts when the configured provider's p90 response time is at most 90 seconds; orchestration from verified head through validated draft MUST stay within 60 seconds p90. Configured provider outages, provider-side rate limits, and GitHub rate-limit waits are excluded and reported separately.
 - **SC-006**: Zero GitHub anchor-rejection (422) responses occur across the acceptance suite because the app proposes only validated inline anchors and demotes all invalid findings before publishing.
-- **SC-007**: Zero reviews are published without explicit confirmation, and zero duplicate reviews occur across 20 timeout, retry, restart, double-click, and multi-tab tests.
+- **SC-007**: Zero reviews are published without explicit confirmation, and across the 20 timeout, retry, restart, double-click, and multi-tab tests at most one review is created per draft.
 - **SC-008**: 100% of attempts to publish against a changed head, unverifiable head, offline state, closed pull request, or merged pull request are blocked with an actionable explanation.
 - **SC-009**: A user can triage ten findings, preview the result, and reach the confirmation step in under three minutes.
 - **SC-010**: 100% of completed review runs show commit identity and, when the provider reports them, token usage and cost.
@@ -338,4 +339,6 @@ As a reviewer, I want to preview and publish the accepted findings as a GitHub r
 - Local data is retained according to FR-091. The app does not store the GitHub token or encrypt a credential because it does not persist one in MVP.
 - Merging and closing pull requests from the board, manual lane overrides, pin/snooze/priority/notes, deep multi-turn code exploration, code execution, test or lint execution, auto-approval, full GitHub conversation and commit browsing, GitLab, Bitbucket, multi-user collaboration, hosted deployment, webhooks, and bidirectionally synchronized project metadata are outside MVP.
 - AI review is advisory. The human reviewer remains responsible for every published comment, event, and approval.
+- GitHub conversation comments and review threads are not sent to the AI reviewer in MVP.
+- GitHub may accept a review after the app's final marker check. The retry verification window bounds but cannot eliminate this race; the app records an uncertain outcome, never auto-retries, and surfaces any later marker match instead of claiming a different result.
 - The app must remain usable with repositories containing hundreds of pull requests and diffs containing hundreds of files, using truncation and clear limits where necessary.
