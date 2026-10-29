@@ -56,8 +56,8 @@
 - [x] T016 Implement the SQLite connection in `server/src/db/connection.ts` with WAL, `foreign_keys=ON`, `busy_timeout=5000`, and transaction helpers
 - [x] T017 Implement the forward-only migration runner in `server/src/db/migrate.ts`, recording applied versions in `schema_migrations` and refusing startup on failure
 - [x] T018 Write `server/migrations/0001_initial.sql` with every table, constraint, partial unique index, and expression index defined in data-model.md
-- [ ] T019 [P] Implement repository, sync-run, acknowledgement, and team-membership data access in `server/src/db/repositoryStore.ts`
-- [ ] T020 [P] Implement pull request, review, and activity data access in `server/src/db/pullRequestStore.ts` and `server/src/db/activityStore.ts`, plus draft and draft-finding data access with nullable `run_id`, `origin` (`ai`/`manual`), unique marker, counts, and publishability calculation in `server/src/db/draftStore.ts`
+- [x] T019 [P] Implement repository, sync-run, acknowledgement, and team-membership data access in `server/src/db/repositoryStore.ts`
+- [x] T020 [P] Implement pull request, review, and activity data access in `server/src/db/pullRequestStore.ts` and `server/src/db/activityStore.ts`, plus draft and draft-finding data access with nullable `run_id`, `origin` (`ai`/`manual`), unique marker, counts, and publishability calculation in `server/src/db/draftStore.ts`
 - [ ] T021 Implement loopback-only Host/Origin checks, CSRF validation, no-CORS headers, and CSP in `server/src/security/local.ts`
 - [ ] T022 Implement the Fastify app factory, error-code mapping, `/api/health`, and `/api/session` (CSRF token, viewer identity, credential source) in `server/src/api/app.ts`, `server/src/api/session.ts`, and `server/src/api/errors.ts`
 - [ ] T023 Implement the SSE hub and `GET /api/events` in `server/src/api/sse.ts` and `server/src/api/routes/events.ts`, including the `ready` frame and 15-second heartbeat per contracts/events.md
