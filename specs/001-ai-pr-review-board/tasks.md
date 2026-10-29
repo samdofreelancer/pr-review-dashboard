@@ -58,9 +58,9 @@
 - [x] T018 Write `server/migrations/0001_initial.sql` with every table, constraint, partial unique index, and expression index defined in data-model.md
 - [x] T019 [P] Implement repository, sync-run, acknowledgement, and team-membership data access in `server/src/db/repositoryStore.ts`
 - [x] T020 [P] Implement pull request, review, and activity data access in `server/src/db/pullRequestStore.ts` and `server/src/db/activityStore.ts`, plus draft and draft-finding data access with nullable `run_id`, `origin` (`ai`/`manual`), unique marker, counts, and publishability calculation in `server/src/db/draftStore.ts`
-- [ ] T021 Implement loopback-only Host/Origin checks, CSRF validation, no-CORS headers, and CSP in `server/src/security/local.ts`
-- [ ] T022 Implement the Fastify app factory, error-code mapping, `/api/health`, and `/api/session` (CSRF token, viewer identity, credential source) in `server/src/api/app.ts`, `server/src/api/session.ts`, and `server/src/api/errors.ts`
-- [ ] T023 Implement the SSE hub and `GET /api/events` in `server/src/api/sse.ts` and `server/src/api/routes/events.ts`, including the `ready` frame and 15-second heartbeat per contracts/events.md
+- [x] T021 Implement loopback-only Host/Origin checks, CSRF validation, no-CORS headers, and CSP in `server/src/security/local.ts`
+- [x] T022 Implement the Fastify app factory, error-code mapping, `/api/health`, and `/api/session` (CSRF token, viewer identity, credential source) in `server/src/api/app.ts`, `server/src/api/session.ts`, and `server/src/api/errors.ts`
+- [x] T023 Implement the SSE hub and `GET /api/events` in `server/src/api/sse.ts` and `server/src/api/routes/events.ts`, including the `ready` frame and 15-second heartbeat per contracts/events.md
 - [ ] T024 Implement the in-process job queue in `server/src/jobs/queue.ts` with cancellation, per-repository sync locks, a global AI concurrency limit of two, one active run per PR, and one publish in flight per draft
 - [ ] T025 Implement GitHub credential resolution and viewer validation in `server/src/github/auth.ts`, re-resolving on 401 and on restart and reporting only source and login
 - [ ] T026 Implement the GitHub client factory in `server/src/github/client.ts` with throttling, retry, rate-limit reset reporting, and consistent `AUTH_*`/`RATE_LIMITED`/`GITHUB_*` error mapping
