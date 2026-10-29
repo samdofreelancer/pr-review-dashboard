@@ -1,5 +1,9 @@
 /**
- * Public domain-contract entry point. Concrete modules are added in the
- * foundational phase so server and web code import one shared surface.
+ * Public domain-contract entry point. Server and web code import the shared
+ * surface from here: enums, limits, the AI denylist, and the Zod schemas
+ * mirroring `contracts/openapi.yaml`.
  */
-export {};
+export * from './types/domain.js';
+export * from './limits/index.js';
+export * from './ai/denylist.js';
+export * from './schemas/index.js';
