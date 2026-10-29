@@ -278,6 +278,14 @@ export const PUBLISH_FALLBACK_REASONS = ['anchors_demoted', 'comment_event_fallb
 export type PublishFallbackReason = (typeof PUBLISH_FALLBACK_REASONS)[number];
 
 // ---------------------------------------------------------------------------
+// Credentials
+// ---------------------------------------------------------------------------
+
+/** GitHub credential sources in resolution precedence order (FR-001). */
+export const CREDENTIAL_SOURCES = ['GH_TOKEN', 'GITHUB_TOKEN', 'gh_cli'] as const;
+export type CredentialSource = (typeof CREDENTIAL_SOURCES)[number];
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 

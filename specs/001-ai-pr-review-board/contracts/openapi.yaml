@@ -680,12 +680,22 @@ components:
     Session:
       type: object
       additionalProperties: false
-      required: [csrfToken, appVersion, ai, limits]
+      required: [csrfToken, appVersion, credentialSource, viewer, ai, limits]
       properties:
         csrfToken:
           type: string
         appVersion:
           type: string
+        credentialSource:
+          type: string
+          enum: [GH_TOKEN, GITHUB_TOKEN, gh_cli]
+        viewer:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [login]
+          properties:
+            login:
+              type: string
         ai:
           type: object
           additionalProperties: false

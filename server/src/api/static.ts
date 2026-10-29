@@ -10,5 +10,11 @@ export async function registerStaticAssets(app: FastifyInstance): Promise<void> 
     wildcard: false,
   });
 
-  app.get('/*', async (_request, reply) => reply.sendFile('index.html'));
+  app.get('/*', async (request, reply) => {
+    // Unknown API paths must stay JSON 404s instead of the SPA shell.
+    if (request.url === '/api' || request.url.startsWith('/api/')) {
+      return reply.callNotFound();
+    }
+    return reply.sendFile('index.html');
+  });
 }

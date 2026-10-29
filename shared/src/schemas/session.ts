@@ -3,7 +3,15 @@
  */
 import { z } from 'zod';
 import { LIMITS } from '../limits/index.js';
-import { DATABASE_STATUSES, HEALTH_STATUSES } from '../types/domain.js';
+import { CREDENTIAL_SOURCES, DATABASE_STATUSES, HEALTH_STATUSES } from '../types/domain.js';
+
+/** GitHub identity resolved from the active credential; null until validated. */
+export const SessionViewerSchema = z
+  .object({
+    login: z.string().min(1),
+  })
+  .strict();
+export type SessionViewer = z.infer<typeof SessionViewerSchema>;
 
 /** AI disclosure summary; `destinationLabel` is null when unknown (FR-008). */
 export const SessionAiSchema = z
@@ -33,6 +41,8 @@ export const SessionSchema = z
   .object({
     csrfToken: z.string(),
     appVersion: z.string(),
+    credentialSource: z.enum(CREDENTIAL_SOURCES),
+    viewer: SessionViewerSchema.nullable(),
     ai: SessionAiSchema,
     limits: SessionLimitsSchema,
   })

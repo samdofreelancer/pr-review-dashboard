@@ -9,12 +9,12 @@
  * - Validation errors throw `ConfigError` so startup (T028) can refuse to
  *   boot with a precise, secret-free message.
  */
-import { LIMITS } from '@pr-review-dashboard/shared';
+import { LIMITS, type CredentialSource } from '@pr-review-dashboard/shared';
 import { createRequire } from 'node:module';
 import { z } from 'zod';
 import { resolveAppPaths, type AppPaths } from './paths.js';
 
-export type CredentialSource = 'GH_TOKEN' | 'GITHUB_TOKEN' | 'gh_cli';
+export type { CredentialSource } from '@pr-review-dashboard/shared';
 
 export interface CredentialConfig {
   readonly source: CredentialSource;
