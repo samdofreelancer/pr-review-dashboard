@@ -53,9 +53,9 @@
 - [x] T013 Implement environment and trusted-local configuration validation in `server/src/config/index.ts`, including credential source detection (`GH_TOKEN`, `GITHUB_TOKEN`, `gh` CLI), AI settings, port, and data root; never log or persist secret values
 - [x] T014 [P] Implement application path resolution and private directory creation in `server/src/config/paths.ts` for `data/`, `repos/`, `artifacts/`, and `logs/` under `APP_DATA_DIR`
 - [x] T015 [P] Implement the redacting structured logger in `server/src/observability/logger.ts`, masking authorization headers, tokens, private keys, and denylisted file content
-- [ ] T016 Implement the SQLite connection in `server/src/db/connection.ts` with WAL, `foreign_keys=ON`, `busy_timeout=5000`, and transaction helpers
-- [ ] T017 Implement the forward-only migration runner in `server/src/db/migrate.ts`, recording applied versions in `schema_migrations` and refusing startup on failure
-- [ ] T018 Write `server/migrations/0001_initial.sql` with every table, constraint, partial unique index, and expression index defined in data-model.md
+- [x] T016 Implement the SQLite connection in `server/src/db/connection.ts` with WAL, `foreign_keys=ON`, `busy_timeout=5000`, and transaction helpers
+- [x] T017 Implement the forward-only migration runner in `server/src/db/migrate.ts`, recording applied versions in `schema_migrations` and refusing startup on failure
+- [x] T018 Write `server/migrations/0001_initial.sql` with every table, constraint, partial unique index, and expression index defined in data-model.md
 - [ ] T019 [P] Implement repository, sync-run, acknowledgement, and team-membership data access in `server/src/db/repositoryStore.ts`
 - [ ] T020 [P] Implement pull request, review, and activity data access in `server/src/db/pullRequestStore.ts` and `server/src/db/activityStore.ts`, plus draft and draft-finding data access with nullable `run_id`, `origin` (`ai`/`manual`), unique marker, counts, and publishability calculation in `server/src/db/draftStore.ts`
 - [ ] T021 Implement loopback-only Host/Origin checks, CSRF validation, no-CORS headers, and CSP in `server/src/security/local.ts`
