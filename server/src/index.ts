@@ -1,26 +1,22 @@
-import { buildApp } from './api/app.js';
-import { loadConfig, type AppConfig } from './config/index.js';
-import { redactString } from './observability/logger.js';
+/**
+ * Entry point (T028): validate configuration, then hand off to startup().
+ * Any pre-listen failure (config validation, migration) exits non-zero with
+ * a secret-free message on stderr.
+ */
+import { ConfigError, loadConfig } from './config/index.js';
+import { startup } from './startup.js';
 
-async function main(): Promise<void> {
-  let config: AppConfig;
-  try {
-    config = loadConfig();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(redactString(message));
-    process.exitCode = 1;
-    return;
+try {
+  const config = loadConfig();
+  const running = await startup(config);
+  process.stdout.write(`PR Review Dashboard running at ${running.url}\n`);
+} catch (error) {
+  if (error instanceof ConfigError) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(2);
   }
-
-  const app = await buildApp({
-    config,
-    logger: { level: process.env['LOG_LEVEL'] ?? 'info' },
-    serveStatic: true,
-  });
-
-  const address = await app.listen({ host: '127.0.0.1', port: config.port });
-  app.log.info({ address }, 'PR Review Dashboard listening on loopback');
+  process.stderr.write(
+    `Startup failed: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  process.exit(1);
 }
-
-await main();
