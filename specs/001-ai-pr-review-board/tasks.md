@@ -62,9 +62,9 @@
 - [x] T022 Implement the Fastify app factory, error-code mapping, `/api/health`, and `/api/session` (CSRF token, viewer identity, credential source) in `server/src/api/app.ts`, `server/src/api/session.ts`, and `server/src/api/errors.ts`
 - [x] T023 Implement the SSE hub and `GET /api/events` in `server/src/api/sse.ts` and `server/src/api/routes/events.ts`, including the `ready` frame and 15-second heartbeat per contracts/events.md
 - [x] T024 Implement the in-process job queue in `server/src/jobs/queue.ts` with cancellation, per-repository sync locks, a global AI concurrency limit of two, one active run per PR, and one publish in flight per draft
-- [ ] T025 Implement GitHub credential resolution and viewer validation in `server/src/github/auth.ts`, re-resolving on 401 and on restart and reporting only source and login
-- [ ] T026 Implement the GitHub client factory in `server/src/github/client.ts` with throttling, retry, rate-limit reset reporting, and consistent `AUTH_*`/`RATE_LIMITED`/`GITHUB_*` error mapping
-- [ ] T027 Implement GitHub head and PR-state verification in `server/src/github/verifyHead.ts` for use before diff preparation, review start, review completion, and publish
+- [x] T025 Implement GitHub credential resolution and viewer validation in `server/src/github/auth.ts`, re-resolving on 401 and on restart and reporting only source and login
+- [x] T026 Implement the GitHub client factory in `server/src/github/client.ts` with throttling, retry, rate-limit reset reporting, and consistent `AUTH_*`/`RATE_LIMITED`/`GITHUB_*` error mapping
+- [x] T027 Implement GitHub head and PR-state verification in `server/src/github/verifyHead.ts` for use before diff preparation, review start, review completion, and publish
 - [ ] T028 Implement startup and graceful shutdown in `server/src/index.ts`: Git preflight, migrations, interrupted-run/uncertain-post marking, job queue boot, browser launch, and port binding to `127.0.0.1`
 - [ ] T029 [P] Create reusable test fixtures in `server/tests/fixtures/git.ts` (temporary bare repositories with PR heads), `server/tests/fixtures/github.ts` (MSW GraphQL/REST handlers), and `server/tests/fixtures/ai.ts` (fake OpenAI-compatible server)
 - [ ] T030 [P] Build the SPA shell in `web/src/app/` and `web/src/api/` with router, QueryClient, typed fetch client carrying the CSRF token, SSE hook with reconnect invalidation, and query keys
