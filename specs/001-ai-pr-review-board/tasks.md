@@ -82,16 +82,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T032 [P] [US1] Unit tests for lane derivation, checks aggregate, and needs-my-review in `server/tests/unit/lane.test.ts` and `server/tests/unit/checks.test.ts`
+- [x] T032 [P] [US1] Unit tests for lane derivation, checks aggregate, and needs-my-review in `server/tests/unit/lane.test.ts` and `server/tests/unit/checks.test.ts`
 - [ ] T033 [P] [US1] Contract tests for session, repositories, board, PR detail, mark-ready, and manual draft creation (`POST /api/prs/{prId}/draft`, nullable `runId`, `origin`) in `server/tests/contract/us1-board.test.ts` against `contracts/openapi.yaml`
 - [ ] T034 [P] [US1] Integration tests for sync idempotency, all lane mappings, dismissed/COMMENTED review handling, partial sync, closed confirmation, and rate-limit backoff in `server/tests/integration/sync.test.ts`
 - [ ] T035 [P] [US1] E2E tests for connect/sync, lane counts and ordering, search/filters, unsupported drags, mark-ready, offline banner, and a timed connect-to-populated-board run for SC-002 in `web/tests/e2e/us1-board.spec.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T036 [P] [US1] Implement lane derivation in `shared/src/lane/deriveLane.ts` exactly as data-model.md, including the decision-bearing review fallback and inaccessible handling
-- [ ] T037 [P] [US1] Implement checks aggregate precedence in `shared/src/checks/aggregate.ts` (failing → pending → passing → neutral → none)
-- [ ] T038 [P] [US1] Implement needs-my-review logic in `shared/src/lane/needsMyReview.ts`, treating indeterminate team membership as displayed but not counted
+- [x] T036 [P] [US1] Implement lane derivation in `shared/src/lane/deriveLane.ts` exactly as data-model.md, including the decision-bearing review fallback and inaccessible handling
+- [x] T037 [P] [US1] Implement checks aggregate precedence in `shared/src/checks/aggregate.ts` (failing → pending → passing → neutral → none)
+- [x] T038 [P] [US1] Implement needs-my-review logic in `shared/src/lane/needsMyReview.ts`, treating indeterminate team membership as displayed but not counted
 - [ ] T039 [US1] Implement GraphQL repository/PR/review queries and pagination in `server/src/github/queries.ts` for all FR-010 fields and decision-bearing review snapshots
 - [ ] T040 [P] [US1] Implement per-head check runs plus commit statuses and team membership REST adapters in `server/src/github/checks.ts` and `server/src/github/teams.ts`
 - [ ] T041 [US1] Implement the sync orchestrator in `server/src/github/sync.ts`: open plus 30-day closed lists, upsert by `(repo_id, number)`, review snapshot persistence, lane recompute, partial/failed retention, no false closures, one sync per repository, and inaccessible PRs keeping their last lane instead of falling into Done

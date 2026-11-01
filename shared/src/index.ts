@@ -7,3 +7,6 @@ export * from './types/domain.js';
 export * from './limits/index.js';
 export * from './ai/denylist.js';
 export * from './schemas/index.js';
+export * from './lane/deriveLane.js';
+export * from './lane/needsMyReview.js';
+export * from './checks/aggregate.js';
