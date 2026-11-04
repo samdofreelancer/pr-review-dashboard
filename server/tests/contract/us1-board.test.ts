@@ -20,11 +20,26 @@ import {
   ReviewDraftSchema,
   SessionSchema,
 } from '@pr-review-dashboard/shared';
+import {
+  createMarkReadyFixtureServer,
+  createSyncFixtureServer,
+  type MarkReadyFixtureSpec,
+} from '../fixtures/github-sync.js';
 import { createHarness, VIEWER_LOGIN, type TestHarness } from '../fixtures/harness.js';
 
 const LANES_IN_ORDER = ['Draft', 'In review', 'Request changes', 'Approved', 'Done'] as const;
 
 let harness: TestHarness;
+
+const ACTION_HEAD_FIXTURE = createMarkReadyFixtureServer({
+  pullRequests: ['50', '51', '60', '61', '62'].map<MarkReadyFixtureSpec>((digits) => ({
+    owner: 'octo-org',
+    name: 'demo-repo',
+    number: Number(digits),
+    headSha: `a${digits.padStart(39, '0')}`,
+    isDraft: Number(digits) < 60,
+  })),
+});
 
 beforeEach(async () => {
   harness = await createHarness();
@@ -85,6 +100,21 @@ describe('GET /api/repos (listRepositories)', () => {
 });
 
 describe('POST /api/repos (connectRepository)', () => {
+  const CONNECT_FIXTURE = createSyncFixtureServer({
+    owner: 'octo-org',
+    name: 'demo-repo',
+    databaseId: 42,
+    visibility: 'PUBLIC',
+    pullRequests: [],
+  });
+
+  beforeEach(() => {
+    CONNECT_FIXTURE.start();
+  });
+  afterEach(() => {
+    CONNECT_FIXTURE.close();
+  });
+
   it('connects a repository by owner/name with CSRF and queues the first sync', async () => {
     const response = await harness.injectWithCsrf({
       method: 'POST',
@@ -159,9 +189,21 @@ describe('GET /api/board (getBoard)', () => {
 
   it('sorts cards newest-first by updatedAt inside each lane', async () => {
     const repoId = harness.connectRepository();
-    harness.seedPullRequest(repoId, { number: 20, reviewDecision: 'APPROVED', updatedAt: '2026-03-01T00:00:00Z' });
-    harness.seedPullRequest(repoId, { number: 21, reviewDecision: 'APPROVED', updatedAt: '2026-03-03T00:00:00Z' });
-    harness.seedPullRequest(repoId, { number: 22, reviewDecision: 'APPROVED', updatedAt: '2026-03-02T00:00:00Z' });
+    harness.seedPullRequest(repoId, {
+      number: 20,
+      reviewDecision: 'APPROVED',
+      updatedAt: '2026-03-01T00:00:00Z',
+    });
+    harness.seedPullRequest(repoId, {
+      number: 21,
+      reviewDecision: 'APPROVED',
+      updatedAt: '2026-03-03T00:00:00Z',
+    });
+    harness.seedPullRequest(repoId, {
+      number: 22,
+      reviewDecision: 'APPROVED',
+      updatedAt: '2026-03-02T00:00:00Z',
+    });
 
     const response = await harness.inject({ method: 'GET', url: '/api/board' });
     expect(response.statusCode).toBe(200);
@@ -234,6 +276,13 @@ describe('GET /api/prs/{prId} (getPullRequest)', () => {
 });
 
 describe('POST /api/prs/{prId}/mark-ready (markReadyForReview)', () => {
+  beforeEach(() => {
+    ACTION_HEAD_FIXTURE.start();
+  });
+  afterEach(() => {
+    ACTION_HEAD_FIXTURE.close();
+  });
+
   it('clears the draft flag on GitHub and returns the refreshed detail', async () => {
     const repoId = harness.connectRepository();
     const prId = harness.seedPullRequest(repoId, {
@@ -255,7 +304,11 @@ describe('POST /api/prs/{prId}/mark-ready (markReadyForReview)', () => {
 
   it('conflicts with STALE_HEAD when the head moved', async () => {
     const repoId = harness.connectRepository();
-    const prId = harness.seedPullRequest(repoId, { number: 51, isDraft: true, headSha: 'a000000000000000000000000000000000000051' });
+    const prId = harness.seedPullRequest(repoId, {
+      number: 51,
+      isDraft: true,
+      headSha: 'a000000000000000000000000000000000000051',
+    });
 
     const response = await harness.injectWithCsrf({
       method: 'POST',
@@ -280,6 +333,13 @@ describe('POST /api/prs/{prId}/mark-ready (markReadyForReview)', () => {
 });
 
 describe('POST /api/prs/{prId}/draft (createManualDraft)', () => {
+  beforeEach(() => {
+    ACTION_HEAD_FIXTURE.start();
+  });
+  afterEach(() => {
+    ACTION_HEAD_FIXTURE.close();
+  });
+
   it('creates a manual draft bound to the verified head with no run', async () => {
     const repoId = harness.connectRepository();
     const prId = harness.seedPullRequest(repoId, {

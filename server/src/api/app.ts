@@ -16,10 +16,16 @@ import {
   type LocalSecurity,
 } from '../security/local.js';
 import { registerErrorHandling } from './errors.js';
+import { registerBoardRoutes } from './routes/board.js';
+import { registerDraftRoutes } from './routes/drafts.js';
 import { registerEventRoutes } from './routes/events.js';
+import { registerPullRequestRoutes } from './routes/prs.js';
+import { registerRepositoryRoutes } from './routes/repos.js';
+import type { RouteDeps } from './routes/context.js';
 import { createHealthProbe, registerSessionRoutes, type HealthProbeOverrides } from './session.js';
 import { createSseHub, type SseHub } from './sse.js';
 import { registerStaticAssets } from './static.js';
+import { createJobQueue, type JobQueue } from '../jobs/queue.js';
 
 export interface BuildAppOptions {
   readonly config: AppConfig;
@@ -31,6 +37,8 @@ export interface BuildAppOptions {
   readonly viewer?: SessionViewer | null;
   readonly serveStatic?: boolean;
   readonly logger?: FastifyServerOptions['logger'];
+  /** Queue override for tests; the app owns a fresh queue otherwise. */
+  readonly queue?: JobQueue;
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
@@ -45,6 +53,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     createSseHub({
       appVersion: options.config.appVersion,
     });
+  const queue = options.queue ?? createJobQueue();
   const healthProbe = createHealthProbe({
     db: options.db ?? null,
     ...(options.health !== undefined ? { overrides: options.health } : {}),
@@ -60,9 +69,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   registerEventRoutes(app, sse);
 
-  app.addHook('onClose', (_instance, done) => {
+  const routeDeps: RouteDeps = {
+    config: options.config,
+    db: options.db ?? null,
+    queue,
+    viewerLogin: options.viewer?.login ?? null,
+    sse,
+  };
+  registerRepositoryRoutes(app, routeDeps);
+  registerBoardRoutes(app, routeDeps);
+  registerPullRequestRoutes(app, routeDeps);
+  registerDraftRoutes(app, routeDeps);
+
+  app.addHook('onClose', async () => {
     sse.close();
-    done();
+    await queue.shutdown();
   });
 
   if (options.serveStatic === true) {

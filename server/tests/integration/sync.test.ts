@@ -1,26 +1,27 @@
 /**
- * Integration tests for the sync pipeline (T034).
+ * Integration tests for the sync pipeline (T034 ↔ T039–T046).
  *
- * Written first and expected to fail while the sync slice (T039–T046) is not
- * implemented. Outcome assertions stay stable; only the provisional fixture
- * wiring in `fixtures/github-sync.ts` is adjusted when the concrete GraphQL
- * document shape lands in `server/src/github/queries.ts`.
+ * The flows drive the real queue + sync orchestrator through the sync HTTP
+ * route, backed by MSW fixtures in `fixtures/github-sync.ts` (self-contained
+ * standalone server; per-test fixture states swap in as runtime handlers).
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { ErrorSchema, SyncRunSchema, type LaneName } from '@pr-review-dashboard/shared';
 import type { LightMyRequestResponse } from 'fastify';
-import { createGithubFixtureServer, GITHUB_ORIGIN } from '../fixtures/github.js';
 import {
-  createSyncHandlers,
+  createSyncRuntimeHandlers,
+  createSyncFixtureServer,
   type SyncFixturePullRequest,
   type SyncFixtureRepository,
 } from '../fixtures/github-sync.js';
-import { createHarness, VIEWER_LOGIN, type TestHarness } from '../fixtures/harness.js';
+import { createHarness, type TestHarness } from '../fixtures/harness.js';
 import { listPullRequestsByRepo } from '../../src/db/pullRequestStore.js';
 import { getLatestSyncRun } from '../../src/db/repositoryStore.js';
 
 const iso = (value: string) => new Date(value).toISOString();
+
+const GITHUB_ORIGIN = 'https://api.github.com';
 
 function fixturePullRequest(
   spec: Partial<SyncFixturePullRequest> & { number: number },
@@ -37,58 +38,63 @@ function fixturePullRequest(
   };
 }
 
-interface SyncContext {
-  readonly harness: TestHarness;
-  readonly github: ReturnType<typeof createGithubFixtureServer>;
-  readonly repoId: string;
+const REPO_BASE: SyncFixtureRepository = {
+  owner: 'octo-org',
+  name: 'demo-repo',
+  databaseId: 42,
+  visibility: 'PUBLIC',
+  pullRequests: [],
+};
+
+let currentFixture: SyncFixtureRepository;
+
+/** Swap the GitHub fixture state for the next sync. */
+function swapSyncFixture(fixture: Partial<SyncFixtureRepository>): SyncFixtureRepository {
+  currentFixture = { ...REPO_BASE, ...fixture };
+  github.server.resetHandlers();
+  github.server.use(...createSyncRuntimeHandlers(currentFixture));
+  return currentFixture;
 }
+
+const github = createSyncFixtureServer(REPO_BASE);
 
 let context: SyncContext;
 
-async function startSync(
-  fixture: Partial<SyncFixtureRepository> = {},
-): Promise<SyncContext> {
-  const full: SyncFixtureRepository = {
-    owner: 'octo-org',
-    name: 'demo-repo',
-    databaseId: 42,
-    visibility: 'PUBLIC',
-    pullRequests: [],
-    ...fixture,
-  };
+interface SyncContext {
+  readonly harness: TestHarness;
+  readonly repoId: string;
+}
+
+/** Seed the repository row directly (production store) and return a context. */
+async function startSync(): Promise<SyncContext> {
   const harness = await createHarness();
-  const github = createGithubFixtureServer({ viewerLogin: VIEWER_LOGIN });
-  github.start();
-  github.server.use(...createSyncHandlers(full));
   const repoId = harness.connectRepository({
-    owner: full.owner,
-    name: full.name,
-    githubRepoId: full.databaseId,
+    owner: currentFixture.owner,
+    name: currentFixture.name,
+    githubRepoId: currentFixture.databaseId,
   });
-  context = { harness, github, repoId };
+  context = { harness, repoId };
   return context;
 }
 
-afterEach(async () => {
-  await context.harness.close();
-  context.github.close();
+beforeAll(() => {
+  github.start();
 });
 
-/** Drive one sync through the HTTP surface (no CSRF → not used; CSRF helper on). */
+afterEach(async () => {
+  await context.harness.close();
+});
+
+afterAll(() => {
+  github.close();
+});
+
+/** Drive one sync through the HTTP surface (CSRF token attached). */
 async function runSync(ctx: SyncContext): Promise<LightMyRequestResponse> {
   return ctx.harness.injectWithCsrf({
     method: 'POST',
     url: `/api/repos/${ctx.repoId}/sync`,
   });
-}
-
-async function runSyncWithFixture(
-  ctx: SyncContext,
-  fixture: Partial<SyncFixtureRepository>,
-): Promise<LightMyRequestResponse> {
-  ctx.github.reset();
-  ctx.github.server.use(...createSyncHandlers({ owner: 'octo-org', name: 'demo-repo', databaseId: 42, visibility: 'PUBLIC', ...fixture }));
-  return runSync(ctx);
 }
 
 function waitForTerminalRun(ctx: SyncContext) {
@@ -113,7 +119,11 @@ async function boardOf(ctx: SyncContext) {
   const response = await ctx.harness.inject({ method: 'GET', url: '/api/board' });
   expect(response.statusCode).toBe(200);
   return JSON.parse(response.body) as {
-    lanes: ReadonlyArray<{ name: LaneName; count: number; cards: ReadonlyArray<{ number: number }> }>;
+    lanes: ReadonlyArray<{
+      name: LaneName;
+      count: number;
+      cards: ReadonlyArray<{ number: number }>;
+    }>;
   };
 }
 
@@ -128,18 +138,32 @@ function laneCounts(board: {
 
 describe('connect → sync → five lanes', () => {
   it('maps every canonical GitHub state to its documented lane', async () => {
-    const ctx = await startSync({
+    const partial = {
       pullRequests: [
         fixturePullRequest({ number: 1, isDraft: true, updatedAt: iso('2026-02-01T00:00:00Z') }),
-        fixturePullRequest({ number: 2, reviewDecision: 'REVIEW_REQUIRED', updatedAt: iso('2026-02-02T00:00:00Z') }),
-        fixturePullRequest({ number: 3, reviewDecision: 'APPROVED', updatedAt: iso('2026-02-03T00:00:00Z') }),
-        fixturePullRequest({ number: 4, reviewDecision: 'CHANGES_REQUESTED', updatedAt: iso('2026-02-04T00:00:00Z') }),
+        fixturePullRequest({
+          number: 2,
+          reviewDecision: 'REVIEW_REQUIRED',
+          updatedAt: iso('2026-02-02T00:00:00Z'),
+        }),
+        fixturePullRequest({
+          number: 3,
+          reviewDecision: 'APPROVED',
+          updatedAt: iso('2026-02-03T00:00:00Z'),
+        }),
+        fixturePullRequest({
+          number: 4,
+          reviewDecision: 'CHANGES_REQUESTED',
+          updatedAt: iso('2026-02-04T00:00:00Z'),
+        }),
         fixturePullRequest({ number: 5, state: 'MERGED', updatedAt: iso('2026-02-05T00:00:00Z') }),
       ],
       closedWindow: [
         fixturePullRequest({ number: 6, state: 'CLOSED', updatedAt: iso('2026-02-06T00:00:00Z') }),
       ],
-    });
+    };
+    setupInitialFixture(partial);
+    const ctx = await startSync();
 
     const response = await runSync(ctx);
     expect(response.statusCode).toBe(202);
@@ -159,9 +183,14 @@ describe('connect → sync → five lanes', () => {
   });
 });
 
-describe('review-derived lanes through sync', () => {
-  it('keeps an approval when only a later COMMENTED review exists (FR-013/014)', async () => {
-    const ctx = await startSync({
+/** Install the GitHub fixture state for the NEXT sync (also re-seats handlers). */
+function setupInitialFixture(partial: Partial<SyncFixtureRepository>): void {
+  swapSyncFixture(partial);
+}
+
+describe('COMMENTED does not clear an approval (FR-013/014)', () => {
+  it('keeps the approval from the decision-bearing review', async () => {
+    setupInitialFixture({
       pullRequests: [
         fixturePullRequest({
           number: 10,
@@ -174,6 +203,7 @@ describe('review-derived lanes through sync', () => {
         }),
       ],
     });
+    const ctx = await startSync();
 
     const response = await runSync(ctx);
     expect(response.statusCode).toBe(202);
@@ -182,9 +212,11 @@ describe('review-derived lanes through sync', () => {
     const board = await boardOf(ctx);
     expect(laneCounts(board)['Approved']).toBe(1);
   });
+});
 
-  it('drops a dismissed approval to In review (latest decision-bearing review wins)', async () => {
-    const ctx = await startSync({
+describe('dismissed approval lane transition', () => {
+  it('drops the PR to In review (latest decision-bearing review wins)', async () => {
+    setupInitialFixture({
       pullRequests: [
         fixturePullRequest({
           number: 11,
@@ -196,6 +228,7 @@ describe('review-derived lanes through sync', () => {
         }),
       ],
     });
+    const ctx = await startSync();
 
     const response = await runSync(ctx);
     expect(response.statusCode).toBe(202);
@@ -214,12 +247,17 @@ describe('review-derived lanes through sync', () => {
 
 describe('sync idempotency', () => {
   it('stores no duplicate rows and keeps lanes stable across repeated syncs', async () => {
-    const ctx = await startSync({
+    setupInitialFixture({
       pullRequests: [
-        fixturePullRequest({ number: 20, reviewDecision: 'APPROVED', updatedAt: iso('2026-02-03T00:00:00Z') }),
+        fixturePullRequest({
+          number: 20,
+          reviewDecision: 'APPROVED',
+          updatedAt: iso('2026-02-03T00:00:00Z'),
+        }),
         fixturePullRequest({ number: 21, updatedAt: iso('2026-02-04T00:00:00Z') }),
       ],
     });
+    const ctx = await startSync();
 
     const first = await runSync(ctx);
     expect(first.statusCode).toBe(202);
@@ -245,19 +283,25 @@ describe('sync idempotency', () => {
 describe('partial and failed syncs', () => {
   it('keeps the last good lanes and reports partial when one PR fails to sync', async () => {
     const good = [
-      fixturePullRequest({ number: 30, reviewDecision: 'APPROVED', updatedAt: iso('2026-02-05T00:00:00Z') }),
+      fixturePullRequest({
+        number: 30,
+        reviewDecision: 'APPROVED',
+        updatedAt: iso('2026-02-05T00:00:00Z'),
+      }),
       fixturePullRequest({ number: 31, updatedAt: iso('2026-02-06T00:00:00Z') }),
     ];
-    const ctx = await startSync({ pullRequests: good });
+    setupInitialFixture({ pullRequests: good });
+    const ctx = await startSync();
     const first = await runSync(ctx);
     expect(first.statusCode).toBe(202);
     await waitForTerminalRun(ctx);
     const boardBefore = await boardOf(ctx);
 
     // Second sync: GitHub answers the check-runs endpoint for PR 31 with 500.
-    const second = await runSyncWithFixture(ctx, {
+    swapSyncFixture({
       pullRequests: good.map((pr) => (pr.number === 31 ? { ...pr, checksUnavailable: true } : pr)),
     });
+    const second = await runSync(ctx);
     expect(second.statusCode).toBe(202);
     const run = await waitForTerminalRun(ctx);
     expect(run.status).toBe('partial');
@@ -274,10 +318,10 @@ describe('partial and failed syncs', () => {
 
 describe('rate limiting', () => {
   it('answers RATE_LIMITED with a Retry-After window when exhausted', async () => {
+    setupInitialFixture();
     const ctx = await startSync();
 
-    ctx.github.reset();
-    ctx.github.server.use(
+    github.server.use(
       http.get(`${GITHUB_ORIGIN}/rate_limit`, () =>
         HttpResponse.json({
           resources: {
@@ -301,6 +345,7 @@ describe('rate limiting', () => {
 
 describe('closed confirmations', () => {
   it('confirms closed PRs into Done and never falsely closes PRs missing from GitHub', async () => {
+    setupInitialFixture();
     const ctx = await startSync();
     ctx.harness.seedPullRequest(ctx.repoId, {
       number: 40,
@@ -313,12 +358,13 @@ describe('closed confirmations', () => {
       updatedAt: iso('2026-02-08T00:00:00Z'),
     });
 
-    const response = await runSyncWithFixture(ctx, {
+    swapSyncFixture({
       pullRequests: [],
       closedWindow: [
         fixturePullRequest({ number: 40, state: 'CLOSED', updatedAt: iso('2026-03-01T00:00:00Z') }),
       ],
     });
+    const response = await runSync(ctx);
     expect(response.statusCode).toBe(202);
     await waitForTerminalRun(ctx);
 
