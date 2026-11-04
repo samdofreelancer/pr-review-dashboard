@@ -2,6 +2,18 @@
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "servers": {
+      "github": {
+        "type": "local",
+        "command": [
+          "docker", "run", "-i", "--rm",
+          "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "-e", "GITHUB_TOOLSETS=context,issues,pull_requests,projects",
+          "ghcr.io/github/github-mcp-server"
+        ],
+        "environment": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "{file:~/.secrets/github-token}"
+        }
+      },
       "codegraph": {
         "type": "local",
         "command": ["codegraph", "serve", "--mcp"]
