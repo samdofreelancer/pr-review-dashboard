@@ -10,6 +10,7 @@ import { ErrorSchema, type ApiError, type ErrorCode } from '@pr-review-dashboard
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { redactString, redactValue } from '../observability/logger.js';
+import { GitHubError } from '../github/client.js';
 
 const STATUS_BY_CODE: Readonly<Record<ErrorCode, number>> = {
   AUTH_MISSING: 401,
@@ -93,6 +94,21 @@ export function toApiError(error: unknown): MappedError {
     return {
       statusCode: error.statusCode,
       body: buildBody(error.code, error.message, error.details, error.retryAfter),
+    };
+  }
+
+  // GitHub adapter failures bubble up as `GitHubError` with a stable
+  // `ErrorCode`; the per-user rate-limit reset instant becomes the same
+  // `Retry-After` contract an exhausted sync probe reports.
+  if (error instanceof GitHubError) {
+    return {
+      statusCode: STATUS_BY_CODE[error.code],
+      body: buildBody(
+        error.code,
+        error.message,
+        undefined,
+        error.resetAt === null ? undefined : error.resetAt.toISOString(),
+      ),
     };
   }
 

@@ -14,7 +14,14 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { CredentialConfig, CredentialSource } from '../config/index.js';
-import { GitHubError, mapGitHubError } from './client.js';
+import {
+  GitHubError,
+  createGitHubClient,
+  createPlainOctokit,
+  mapGitHubError,
+  type GitHubClient,
+  type GitHubOctokit,
+} from './client.js';
 
 const execFileP = promisify(execFile);
 
@@ -114,4 +121,39 @@ export async function resolveViewerAuth(
     return null;
   }
   return { source: 'gh_cli', token: cliToken, login: await validateViewer(cliToken) };
+}
+
+export interface AuthenticatedGitHub {
+  readonly auth: ResolvedAuth;
+  readonly client: GitHubClient;
+  /**
+   * Plugin-free REST client sharing the same credential (see
+   * `createPlainOctokit`): per-pull-request checks/teams reads use one fast
+   * attempt instead of waiting through throttle/retry cycles.
+   */
+  readonly plainOctokit: GitHubOctokit;
+}
+
+/**
+ * Resolve the live credential and build a client around it, throwing a
+ * stable `GitHubError` (`AUTH_MISSING` / `AUTH_INVALID`) when the app has
+ * no working credential. Called at request time so a repaired credential
+ * is picked up without a restart (FR-001/002).
+ */
+export async function resolveGitHubClient(
+  credential: CredentialConfig,
+  readCliToken?: GhCliTokenReader,
+): Promise<AuthenticatedGitHub> {
+  const auth = await resolveViewerAuth(
+    credential,
+    readCliToken === undefined ? undefined : readCliToken,
+  );
+  if (auth === null) {
+    throw new GitHubError('AUTH_MISSING', 'No GitHub credential is available');
+  }
+  return {
+    auth,
+    client: createGitHubClient({ token: auth.token }),
+    plainOctokit: createPlainOctokit({ token: auth.token }),
+  };
 }

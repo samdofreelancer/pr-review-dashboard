@@ -129,6 +129,19 @@ export function mapGitHubError(input: unknown): GitHubError {
   ) {
     return new GitHubError('OFFLINE', 'GitHub is unreachable from this machine');
   }
+  // GraphQL failures carry no HTTP status; classify on the error message.
+  if (message.includes('bad credentials')) {
+    return new GitHubError('AUTH_INVALID', 'GitHub rejected the credential');
+  }
+  if (message.includes('forbidden') || message.includes('not authorized')) {
+    return new GitHubError('PERMISSION_DENIED', 'GitHub denied this request for the current token');
+  }
+  if (message.includes('rate limit') || message.includes('secondary rate')) {
+    return new GitHubError('RATE_LIMITED', 'GitHub rate limit reached', resetAt);
+  }
+  if (message.includes('could not resolve')) {
+    return new GitHubError('NOT_FOUND', 'GitHub resource not found');
+  }
   return new GitHubError('INTERNAL', 'Unexpected GitHub failure');
 }
 
@@ -167,4 +180,16 @@ export function createGitHubClient(options: CreateGitHubClientOptions): GitHubCl
   }
 
   return { octokit, getRateLimitStatus };
+}
+
+/**
+ * Plugin-free REST client (research R16 follow-up). The throttling and retry
+ * plugins exist for the long-running list/snapshot GraphQL reads, but they
+ * are counter-productive for the high-fanout per-pull-request REST reads:
+ * a retry cycle (1s + 2s backoff per PR) each on the checks pair is exactly
+ * what blows the Foam-slice sync window when GitHub answers 500. Per-PR
+ * callers want one fast attempt they can skip individually.
+ */
+export function createPlainOctokit(options: { readonly token: string }): GitHubOctokit {
+  return new Octokit({ auth: options.token, userAgent: USER_AGENT });
 }
