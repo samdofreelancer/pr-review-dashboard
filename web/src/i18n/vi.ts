@@ -29,6 +29,9 @@ export const VI = {
     connectRepository: 'Kết nối repository',
     sync: 'Đồng bộ ngay',
     syncing: 'Đang đồng bộ…',
+    needsMyReview: 'Yêu cầu review của tôi',
+    emptyLaneBody: 'Trống',
+    staleNotice: 'Dữ liệu có thể đã cũ — hãy đồng bộ lại.',
   },
   states: {
     loading: 'Đang tải…',
