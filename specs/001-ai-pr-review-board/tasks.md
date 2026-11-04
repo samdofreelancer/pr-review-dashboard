@@ -83,8 +83,8 @@
 ### Tests for User Story 1
 
 - [x] T032 [P] [US1] Unit tests for lane derivation, checks aggregate, and needs-my-review in `server/tests/unit/lane.test.ts` and `server/tests/unit/checks.test.ts`
-- [ ] T033 [P] [US1] Contract tests for session, repositories, board, PR detail, mark-ready, and manual draft creation (`POST /api/prs/{prId}/draft`, nullable `runId`, `origin`) in `server/tests/contract/us1-board.test.ts` against `contracts/openapi.yaml`
-- [ ] T034 [P] [US1] Integration tests for sync idempotency, all lane mappings, dismissed/COMMENTED review handling, partial sync, closed confirmation, and rate-limit backoff in `server/tests/integration/sync.test.ts`
+- [x] T033 [P] [US1] Contract tests for session, repositories, board, PR detail, mark-ready, and manual draft creation (`POST /api/prs/{prId}/draft`, nullable `runId`, `origin`) in `server/tests/contract/us1-board.test.ts` against `contracts/openapi.yaml`
+- [x] T034 [P] [US1] Integration tests for sync idempotency, all lane mappings, dismissed/COMMENTED review handling, partial sync, closed confirmation, and rate-limit backoff in `server/tests/integration/sync.test.ts`
 - [ ] T035 [P] [US1] E2E tests for connect/sync, lane counts and ordering, search/filters, unsupported drags, mark-ready, offline banner, and a timed connect-to-populated-board run for SC-002 in `web/tests/e2e/us1-board.spec.ts`
 
 ### Implementation for User Story 1
