@@ -7,6 +7,7 @@ import { MarkReadyRequestSchema, type PullRequestDetail } from '@pr-review-dashb
 import type { FastifyInstance } from 'fastify';
 import { buildPullRequestDetail, requirePullRequest } from '../../github/boardService.js';
 import { markReadyForReview } from '../../github/actions.js';
+import { createActivitySink } from '../../observability/activity.js';
 import { requireDb, type RouteDeps } from './context.js';
 
 const PrParamsSchema = z.object({ prId: z.string().min(1) }).strict();
@@ -22,7 +23,12 @@ export function registerPullRequestRoutes(app: FastifyInstance, deps: RouteDeps)
     const db = requireDb(deps.db);
     const body = MarkReadyRequestSchema.parse(request.body);
     return markReadyForReview(
-      { db, config: deps.config, viewerLogin: deps.viewerLogin },
+      {
+        db,
+        config: deps.config,
+        viewerLogin: deps.viewerLogin,
+        events: createActivitySink(db, deps.sse),
+      },
       PrParamsSchema.parse(request.params).prId,
       body,
     );

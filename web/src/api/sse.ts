@@ -42,6 +42,39 @@ export function useConnectionState(): ConnectionState {
   return useSyncExternalStore(subscribeConnection, getConnectionState, () => 'connecting');
 }
 
+// ---------------------------------------------------------------------------
+// Rate-limit window (T052): captured from `repo.updated` payloads
+// ---------------------------------------------------------------------------
+
+export interface RateLimitState {
+  readonly repoId: string;
+  readonly resetAt: string;
+}
+
+let rateLimitInternal: RateLimitState | null = null;
+const rateLimitListeners = new Set<(state: RateLimitState | null) => void>();
+
+function setRateLimit(state: RateLimitState | null): void {
+  if (rateLimitInternal === state) return;
+  rateLimitInternal = state;
+  for (const listener of rateLimitListeners) listener(state);
+}
+
+export function subscribeRateLimit(listener: (state: RateLimitState | null) => void): () => void {
+  rateLimitListeners.add(listener);
+  return () => {
+    rateLimitListeners.delete(listener);
+  };
+}
+
+export function getRateLimitState(): RateLimitState | null {
+  return rateLimitInternal;
+}
+
+export function useRateLimitReset(): string | null {
+  return useSyncExternalStore(subscribeRateLimit, getRateLimitState, () => null)?.resetAt ?? null;
+}
+
 /** Event names that touch board-visible data (see contracts/events.md). */
 const MILESTONE_EVENT_NAMES: ReadonlySet<string> = new Set<string>([
   'board.updated',
@@ -78,7 +111,29 @@ export function useEventStream(): void {
     for (const name of SSE_NAMES) {
       if (name === 'ready') continue;
       if (!MILESTONE_EVENT_NAMES.has(name)) continue;
-      source.addEventListener(name, () => {
+      source.addEventListener(name, (raw) => {
+        if (name === 'repo.updated') {
+          // The rate-limit reset window rides `repo.updated` (T052); parse
+          // defensively — a malformed frame only skips the banner capture.
+          const data = (raw as MessageEvent<unknown>).data;
+          if (typeof data === 'string') {
+            try {
+              const payload = JSON.parse(data) as {
+                rateLimitResetAt?: string | null;
+                repoId?: string;
+              };
+              setRateLimit(
+                payload.rateLimitResetAt && payload.repoId
+                  ? { repoId: payload.repoId, resetAt: payload.rateLimitResetAt }
+                  : null,
+              );
+            } catch {
+              setRateLimit(null);
+            }
+          } else {
+            setRateLimit(null);
+          }
+        }
         void queryClient.invalidateQueries();
       });
     }

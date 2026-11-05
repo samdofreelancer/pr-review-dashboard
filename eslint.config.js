@@ -42,7 +42,12 @@ export default tseslint.config(
     extends: [tseslint.configs.disableTypeChecked],
   },
   {
-    files: ['playwright.config.ts', 'vitest.config.ts', 'server/tests/**/*.ts'],
+    files: [
+      'playwright.config.ts',
+      'vitest.config.ts',
+      'server/tests/**/*.ts',
+      'web/tests/**/*.{ts,tsx}',
+    ],
     extends: [tseslint.configs.disableTypeChecked],
   },
   prettier,

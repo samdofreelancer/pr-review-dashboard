@@ -359,6 +359,14 @@ export function createMarkReadyFixtureServer(options: {
         resources: { core: { limit: 5000, remaining: 4999, reset: 2_000_000_000 } },
       }),
     ),
+    // Persistence refreshes the checks snapshot for the head; deterministic
+    // empty answers keep the mark-ready flow quiet and fast.
+    http.get(`${GITHUB_ORIGIN}/repos/:owner/:repo/commits/:sha/check-runs`, () =>
+      HttpResponse.json({ total_count: 0, check_runs: [] }),
+    ),
+    http.get(`${GITHUB_ORIGIN}/repos/:owner/:repo/commits/:sha/status`, () =>
+      HttpResponse.json({ state: 'SUCCESS', statuses: [] }),
+    ),
     graphql.query('ViewerLogin', () =>
       HttpResponse.json({
         data: { viewer: { login: options.viewerLogin ?? SYNC_VIEWER_LOGIN } },

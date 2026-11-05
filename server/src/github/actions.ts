@@ -29,11 +29,14 @@ import { fetchPullRequestSnapshot } from './queries.js';
 import { persistPullRequestSnapshot } from './sync.js';
 import { resolveGitHubClient } from './auth.js';
 import { verifyHead } from './verifyHead.js';
+import type { ActivitySink } from '../observability/activity.js';
 
 export interface ActionDeps {
   readonly db: Database;
   readonly config: AppConfig;
   readonly viewerLogin: string | null;
+  /** Activity/SSE sink (T046); null keeps flows runnable without a stream. */
+  readonly events: ActivitySink | null;
 }
 
 const MARK_READY_MUTATION = `
@@ -127,6 +130,14 @@ export async function markReadyForReview(
     // The board keeps the previous checks state when GitHub will not confirm.
   }
   persistPullRequestSnapshot(deps.db, row.repoId, snapshot, checksState, { runId: null });
+
+  // T046: mark-ready is a user-visible milestone both persisted and streamed.
+  deps.events?.recordActivity('mark_ready', {
+    repoId: row.repoId,
+    prId: row.id,
+    data: { number: row.number },
+  });
+  deps.events?.boardUpdated({ reason: 'mark_ready', repoId: row.repoId, prId: row.id });
 
   return buildPullRequestDetail(
     { db: deps.db, config: deps.config, viewerLogin: deps.viewerLogin },

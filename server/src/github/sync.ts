@@ -42,12 +42,15 @@ import { fetchChecksForHead } from './checks.js';
 import { fetchRepositoryPullRequests, type GitHubPullRequestSnapshot } from './queries.js';
 import { upsertTeamMembershipFromGitHub, type RequestedTeam } from './teams.js';
 import type { GitHubOctokit } from './client.js';
+import type { ActivitySink } from '../observability/activity.js';
 
 export interface SyncDeps {
   readonly db: Database;
   readonly config: AppConfig;
   /** Viewer login; empty disables team-membership lookups. */
   readonly viewerLogin: string;
+  /** Activity/SSE sink (T046); null keeps flows runnable without a stream. */
+  readonly events: ActivitySink | null;
 }
 
 export interface SyncInvocation {
@@ -80,16 +83,32 @@ export async function runRepositorySync(deps: SyncDeps, invocation: SyncInvocati
   let closedSeen = 0;
   let partial = false;
   let partialReason: string | null = null;
+  const events = deps.events;
 
   try {
+    events?.syncStarted({
+      repoId: repo.id,
+      syncRunId: invocation.runId,
+      startedAt: new Date().toISOString(),
+    });
     const { client, plainOctokit } = await resolveGitHubClient(config.credential);
     const list = await fetchRepositoryPullRequests(client.octokit, {
       owner: repo.owner,
       name: repo.name,
     });
 
+    const listSeen = list.open.length + list.closed.length;
+    events?.syncProgress({
+      repoId: repo.id,
+      syncRunId: invocation.runId,
+      phase: 'pull_requests',
+      fetched: listSeen,
+      total: listSeen,
+    });
+
     await refreshRequestedTeams(db, plainOctokit, [...list.open, ...list.closed], viewerLogin);
 
+    let checksDone = 0;
     for (const snapshot of list.open) {
       if (await persistWithChecks(db, plainOctokit, repo, snapshot, invocation.runId)) {
         openSeen += 1;
@@ -97,6 +116,14 @@ export async function runRepositorySync(deps: SyncDeps, invocation: SyncInvocati
         partial = true;
         partialReason = 'checks_unavailable';
       }
+      checksDone += 1;
+      events?.syncProgress({
+        repoId: repo.id,
+        syncRunId: invocation.runId,
+        phase: 'checks',
+        fetched: checksDone,
+        total: listSeen,
+      });
     }
     for (const snapshot of list.closed) {
       if (await persistWithChecks(db, plainOctokit, repo, snapshot, invocation.runId)) {
@@ -105,6 +132,14 @@ export async function runRepositorySync(deps: SyncDeps, invocation: SyncInvocati
         partial = true;
         partialReason = 'checks_unavailable';
       }
+      checksDone += 1;
+      events?.syncProgress({
+        repoId: repo.id,
+        syncRunId: invocation.runId,
+        phase: 'checks',
+        fetched: checksDone,
+        total: listSeen,
+      });
     }
 
     const finishedAt = new Date().toISOString();
@@ -117,6 +152,19 @@ export async function runRepositorySync(deps: SyncDeps, invocation: SyncInvocati
       partialReason,
     });
     updateRepositorySyncStamp(db, repo.id, partial ? 'partial' : 'succeeded', finishedAt);
+    events?.syncCompleted(
+      {
+        repoId: repo.id,
+        syncRunId: invocation.runId,
+        status,
+        finishedAt,
+        openSeen,
+        closedSeen,
+        error: null,
+        rateLimitResetAt: null,
+      },
+      { record: true },
+    );
   } catch (error) {
     const candidate = error as { code?: unknown; resetAt?: unknown } | null;
     const code = typeof candidate?.code === 'string' ? candidate.code : 'INTERNAL';
@@ -134,6 +182,19 @@ export async function runRepositorySync(deps: SyncDeps, invocation: SyncInvocati
       rateLimitResetAt: resetAt === null ? null : resetAt.toISOString(),
     });
     updateRepositorySyncStamp(db, repo.id, 'failed', null);
+    events?.syncCompleted(
+      {
+        repoId: repo.id,
+        syncRunId: invocation.runId,
+        status: 'failed',
+        finishedAt: now,
+        openSeen,
+        closedSeen,
+        error: { code, message },
+        rateLimitResetAt: resetAt === null ? null : resetAt.toISOString(),
+      },
+      { record: true },
+    );
   }
 }
 

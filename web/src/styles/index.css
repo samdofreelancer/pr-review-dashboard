@@ -478,7 +478,9 @@ button:focus-visible,
   border-radius: 8px;
   padding: 12px;
   position: relative;
-  transition: transform 0.1s, box-shadow 0.1s;
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
 }
 
 .board-card:hover {
@@ -755,5 +757,100 @@ button:focus-visible,
 .repo-sync-button,
 .repo-disconnect-button {
   font-size: 0.75rem;
+  padding: 4px 10px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Status banners, auth, sync rows, window controls (T046–T053)
+ * ------------------------------------------------------------------------- */
+
+.banner-title {
+  font-weight: 600;
+}
+
+.banner .button {
+  margin-top: 6px;
+}
+
+.banner-warning .button {
+  color: var(--warn);
+}
+
+.auth-steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.button-danger {
+  color: var(--danger-text, #fff);
+  background: var(--danger, #f25767);
+}
+
+.button-primary {
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.filter-clear {
+  align-self: flex-end;
+  font-size: 0.9rem;
+  padding: 6px 14px;
+  white-space: nowrap;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border, #8888);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.sync-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+}
+
+.sync-badge-succeeded {
+  background: rgba(72, 187, 120, 0.18);
+}
+
+.sync-badge-partial {
+  background: rgba(240, 184, 73, 0.18);
+}
+
+.sync-badge-failed {
+  background: rgba(242, 87, 103, 0.18);
+}
+
+.sync-problem {
+  width: 100%;
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
+.lane-window-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lane-window-controls .button {
+  font-size: 0.8rem;
   padding: 4px 10px;
 }
