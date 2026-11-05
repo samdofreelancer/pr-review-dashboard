@@ -69,10 +69,7 @@ function openPrFixture(): SyncFixtureRepository {
 
 function waitForTerminalRun(harness: TestHarness, repoId: string) {
   return expect
-    .poll(
-      () => getLatestSyncRun(harness.db, repoId)?.status,
-      { timeout: 10_000, interval: 25 },
-    )
+    .poll(() => getLatestSyncRun(harness.db, repoId)?.status, { timeout: 10_000, interval: 25 })
     .not.toBe('running');
 }
 
@@ -180,9 +177,7 @@ describe('connect/disconnect activity + SSE (T046)', () => {
     hub = new RecordingSseHub({ appVersion: 'test', heartbeatMs: 60_000 });
     harness = await createHarness({ sse: hub });
     github.server.resetHandlers();
-    github.server.use(
-      ...createSyncRuntimeHandlers({ ...REPO_BASE, pullRequests: [] }),
-    );
+    github.server.use(...createSyncRuntimeHandlers({ ...REPO_BASE, pullRequests: [] }));
 
     const response = await harness.injectWithCsrf({
       method: 'POST',

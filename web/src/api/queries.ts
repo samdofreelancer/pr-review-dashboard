@@ -8,10 +8,12 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   BoardSchema,
   HealthSchema,
+  PullRequestDetailSchema,
   RepositorySchema,
   SessionSchema,
   type Board,
   type Health,
+  type PullRequestDetail,
   type Repository,
   type Session,
 } from '@pr-review-dashboard/shared';
@@ -52,8 +54,7 @@ export async function loadBoard(params?: {
   readonly needsMyReview?: boolean | null;
 }): Promise<Board> {
   const search = new URLSearchParams();
-  if (params?.repoId !== null && params?.repoId !== undefined)
-    search.set('repoId', params.repoId);
+  if (params?.repoId !== null && params?.repoId !== undefined) search.set('repoId', params.repoId);
   if (params?.q !== null && params?.q !== undefined) search.set('q', params.q);
   if (params?.needsMyReview !== null && params?.needsMyReview !== undefined)
     search.set('needsMyReview', String(params.needsMyReview));
@@ -91,9 +92,7 @@ export async function connectRepository(body: {
   readonly owner: string;
   readonly name: string;
 }): Promise<Repository> {
-  return RepositorySchema.parse(
-    await apiFetch('/api/repos', { method: 'POST', body }),
-  );
+  return RepositorySchema.parse(await apiFetch('/api/repos', { method: 'POST', body }));
 }
 
 /** Disconnect a repository (mutation). */
@@ -104,6 +103,11 @@ export async function disconnectRepository(repoId: string): Promise<void> {
 /** Start a sync for a repository (mutation). */
 export async function startSync(repoId: string): Promise<unknown> {
   return apiFetch(`/api/repos/${repoId}/sync`, { method: 'POST' });
+}
+
+/** Fetch one pull-request detail (board card writes need the head SHA). */
+export async function loadPullRequest(prId: string): Promise<PullRequestDetail> {
+  return PullRequestDetailSchema.parse(await apiFetch(`/api/prs/${prId}`));
 }
 
 /** Mark a pull request ready for review (mutation). */

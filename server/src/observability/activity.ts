@@ -82,7 +82,11 @@ export interface ActivitySink {
   recordActivity(type: ActivityType, input: ActivityRecordInput): void;
 }
 
-function safeBroadcast(target: SseBroadcastTarget | null, event: SseName, data: Record<string, unknown>): void {
+function safeBroadcast(
+  target: SseBroadcastTarget | null,
+  event: SseName,
+  data: Record<string, unknown>,
+): void {
   if (target === null) return;
   try {
     target.broadcast(event, redactValue(data) as Record<string, unknown>);
@@ -91,10 +95,7 @@ function safeBroadcast(target: SseBroadcastTarget | null, event: SseName, data: 
   }
 }
 
-export function createActivitySink(
-  db: Database,
-  target: SseBroadcastTarget | null,
-): ActivitySink {
+export function createActivitySink(db: Database, target: SseBroadcastTarget | null): ActivitySink {
   return {
     syncStarted(frame) {
       safeBroadcast(target, 'sync.started', { ...frame });
