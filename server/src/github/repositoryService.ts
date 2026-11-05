@@ -28,6 +28,7 @@ import { GitHubError, mapGitHubError, type GitHubOctokit } from './client.js';
 import { resolveGitHubClient } from './auth.js';
 import { VIEWER_PERMISSIONS, type ViewerPermission } from './verifyHead.js';
 import { normalizeRepositoryVisibility } from './visibility.js';
+import type { ActivitySink } from '../observability/activity.js';
 
 export interface RepositoryDeps {
   readonly db: Database;
@@ -37,6 +38,8 @@ export interface RepositoryDeps {
   readonly startSyncJob: (repoId: string, runId: string) => void;
   /** Queue side: cancel any active sync for the repository (disconnect). */
   readonly stopSyncJob: (repoId: string) => void;
+  /** Activity/SSE sink (T046); null keeps flows runnable without a stream. */
+  readonly events: ActivitySink | null;
 }
 
 const CONNECT_QUERY = `
@@ -228,6 +231,12 @@ export async function connectRepository(
   if (row === null) {
     throw new AppError('INTERNAL', 'Repository was inserted but could not be read back.');
   }
+  // T046: the connection is an app-recorded event and a board update.
+  deps.events?.recordActivity('repo_connected', {
+    repoId,
+    data: { owner: row.owner, name: row.name, visibility: row.visibility },
+  });
+  deps.events?.boardUpdated({ reason: 'repo_connected', repoId, prId: null });
   deps.startSyncJob(repoId, runId);
   return { repository: toRepositoryPayload(deps.db, deps.config, row), initialSyncRunId: runId };
 }
@@ -255,4 +264,7 @@ export async function disconnectRepository(deps: RepositoryDeps, repoId: string)
   } catch {
     // A stuck directory is swept by the retention job later.
   }
+
+  // Rows are deleted; every open tab must drop its cached board slices.
+  deps.events?.boardUpdated({ reason: 'repo_disconnected', repoId, prId: null });
 }

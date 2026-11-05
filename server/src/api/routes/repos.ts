@@ -37,10 +37,16 @@ import {
   type RepositoryDeps,
 } from '../../github/repositoryService.js';
 import { runRepositorySync } from '../../github/sync.js';
+import { createActivitySink, type ActivitySink } from '../../observability/activity.js';
 import { requireDb, type RouteDeps } from './context.js';
 
 const RepoParamsSchema = z.object({ repoId: z.string().min(1) }).strict();
 const DisconnectQuerySchema = z.object({ confirm: z.literal('true') }).strict();
+
+/** One sink per request scope; the hub itself is process-wide. */
+function activityEvents(deps: RouteDeps, db: Database): ActivitySink {
+  return createActivitySink(db, deps.sse);
+}
 
 /** Build the sync-run wire payload from its row (drift-guarded). */
 export function toSyncRunPayload(db: Database, runId: string): SyncRun {
@@ -69,14 +75,16 @@ export function toSyncRunPayload(db: Database, runId: string): SyncRun {
 
 function repositoryRouteDeps(deps: RouteDeps): RepositoryDeps {
   const db = requireDb(deps.db);
+  const events = activityEvents(deps, db);
   return {
     db,
     config: deps.config,
     viewerLogin: deps.viewerLogin ?? '',
+    events,
     startSyncJob(repoId, runId) {
       deps.queue.enqueueSync(repoId, async () => {
         await runRepositorySync(
-          { db, config: deps.config, viewerLogin: deps.viewerLogin ?? '' },
+          { db, config: deps.config, viewerLogin: deps.viewerLogin ?? '', events },
           { repoId, runId },
         );
       });

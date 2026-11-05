@@ -21,6 +21,7 @@ import {
   type SessionViewer,
 } from '@pr-review-dashboard/shared';
 import { buildApp } from '../../src/api/app.js';
+import type { SseHub } from '../../src/api/sse.js';
 import type { AppConfig } from '../../src/config/index.js';
 import { openDatabase, closeDatabase, type Database } from '../../src/db/connection.js';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -93,7 +94,11 @@ function buildConfig(dataRoot: string): AppConfig {
 }
 
 export async function createHarness(
-  options: { viewer?: SessionViewer | null } = {},
+  options: {
+    viewer?: SessionViewer | null;
+    /** Custom SSE hub (recording spy) for activity/SSE assertions (T046). */
+    sse?: SseHub;
+  } = {},
 ): Promise<TestHarness> {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'prdbh-'));
   await mkdir(path.join(tempRoot, 'data'), { recursive: true });
@@ -104,6 +109,7 @@ export async function createHarness(
     config,
     db,
     viewer: options.viewer ?? { login: VIEWER_LOGIN },
+    ...(options.sse !== undefined ? { sse: options.sse } : {}),
   });
 
   let csrfToken: string | null = null;

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { ManualDraftCreateSchema, type ReviewDraft } from '@pr-review-dashboard/shared';
 import type { FastifyInstance } from 'fastify';
 import { createManualDraft } from '../../github/actions.js';
+import { createActivitySink } from '../../observability/activity.js';
 import { requireDb, type RouteDeps } from './context.js';
 
 const PrParamsSchema = z.object({ prId: z.string().min(1) }).strict();
@@ -16,7 +17,12 @@ export function registerDraftRoutes(app: FastifyInstance, deps: RouteDeps): void
     const db = requireDb(deps.db);
     const body = ManualDraftCreateSchema.parse(request.body);
     const draft = await createManualDraft(
-      { db, config: deps.config, viewerLogin: deps.viewerLogin },
+      {
+        db,
+        config: deps.config,
+        viewerLogin: deps.viewerLogin,
+        events: createActivitySink(db, deps.sse),
+      },
       PrParamsSchema.parse(request.params).prId,
       body,
     );
